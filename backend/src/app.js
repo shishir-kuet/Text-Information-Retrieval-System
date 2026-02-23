@@ -5,6 +5,7 @@ const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 
 const healthRoutes = require("./routes/health.routes");
+const bookRoutes = require("./routes/book.routes");
 const { notFoundHandler, errorHandler } = require("./middlewares/error.middleware");
 
 const app = express();
@@ -30,6 +31,7 @@ app.use(
 
 // Routes
 app.use("/api/health", healthRoutes);
+app.use("/api/books", bookRoutes);
 
 // Error handlers
 app.use(notFoundHandler);
