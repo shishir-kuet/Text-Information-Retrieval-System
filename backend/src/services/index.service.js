@@ -26,10 +26,6 @@ class IndexService {
 
       logger.info(`Building index for book: ${book.title} (ID: ${bookId})`);
 
-      // Update book status to indexing
-      book.status = "indexing";
-      await book.save();
-
       // 2. Get all pages for this book
       const pages = await Page.find({ bookId: bookId }).sort({ pageNumber: 1 });
       

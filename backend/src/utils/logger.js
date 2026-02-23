@@ -11,4 +11,12 @@ function logWarn(msg) {
   console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`);
 }
 
-module.exports = { logInfo, logError, logWarn };
+// Export with both naming conventions for compatibility
+module.exports = {
+  logInfo,
+  logError,
+  logWarn,
+  info: logInfo,
+  error: logError,
+  warn: logWarn
+};

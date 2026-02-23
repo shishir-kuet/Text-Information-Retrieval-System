@@ -12,6 +12,7 @@
     "check:index": "node check-inverted-index.js",
     "test:pdf": "node test-pdf-ingestion.js",
     "test:index": "node test-inverted-index.js",
+    "create:sample-pdf": "node scripts/create-sample-pdf.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -34,7 +35,7 @@
     "multer": "^2.0.2",
     "natural": "^8.1.0",
     "pdf-lib": "^1.17.1",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.1",
     "sharp": "^0.34.5",
     "stopword": "^3.1.5",
     "tesseract.js": "^7.0.0"
