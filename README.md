@@ -1,4 +1,4 @@
-# Digital Book Source Retrieval System
+# Text Information Retrieval System
 
 **Indexed Search Engine for Controlled Digital Library**
 
