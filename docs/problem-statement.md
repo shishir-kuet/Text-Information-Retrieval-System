@@ -13,49 +13,46 @@ Universities and institutions maintain large digital collections of books. Often
 
 Given an input text query (a sentence or paragraph), the system must identify the most relevant source locations inside a controlled digital library, and return the corresponding:
 
-- Book information (title, author, year)
+- Book title and domain
 - Page number
 - Relevance score
-- Text snippet with highlights
+- Text snippet (preview)
 
 ## Primary Objective
 
-Design and develop a full-stack information retrieval system that indexes a controlled collection of books and retrieves the most relevant pages for a given text query using **inverted index** and **TF-IDF ranking** (non-AI/ML approach).
+Design and develop an information retrieval system that indexes a controlled collection of books and retrieves the most relevant pages for a given text query using an **inverted index** and **BM25 ranking** (non-AI/ML approach).
 
 ## Why This is a System Engineering Project
 
 This project encompasses:
 
-- Dataset ingestion and processing
+- Dataset ingestion and processing (PDF text extraction)
 - **OCR (Optical Character Recognition)** for scanned document text extraction
-- Image preprocessing for OCR optimization
-- Database design and optimization
-- Indexing algorithms (inverted index)
-- Search ranking algorithms (TF-IDF)
-- API development (RESTful)
-- UI/UX development (React)
-- Security (authentication, role-based access)
-- Testing (unit, integration, performance)
+- Database design and optimisation (MongoDB)
+- Indexing algorithms (inverted index with BM25)
+- Search ranking algorithms (BM25 + proximity scoring + exact-phrase boost)
+- Python backend architecture (services, models, config layers)
+- Testing (unit and integration)
 - Performance evaluation and analysis
-- Professional project management workflow (Git, PRs, code reviews)
+- Professional project management workflow (Git, branches, commits)
 
 ## Stakeholders
 
-1. **Admin**: Manages book ingestion and indexing
-2. **User**: Searches by text and views results
+1. **Admin**: Manages book ingestion and index building via CLI scripts
+2. **User**: Searches by text query via the CLI search interface
 3. **Supervisor/Examiner**: Evaluates engineering process, documentation, and outcomes
 
 ## Success Criteria
 
 1. Returns correct book + page for known queries
-2. Search latency remains acceptable as the number of pages increases
+2. Search latency is below 2 seconds for typical queries on the full collection
 3. Index build time and storage usage are measured and reported
-4. Clear GitHub workflow evidence: branches, PRs, code reviews, commits, issues
-5. Comprehensive documentation and professional presentation
+4. Codebase is modular, tested, and follows professional structure
+5. Comprehensive documentation maintained in the `docs/` folder
 
 ## Constraints
 
 - Must use algorithm-based approach (no AI/ML models)
-- Must demonstrate professional teamwork through GitHub
-- Must show engineering depth, not just working code
-- Must include performance analysis and scalability testing
+- Must demonstrate a professional, layered Python codebase
+- Must include unit tests and integration tests
+- Must include performance analysis and scalability considerations

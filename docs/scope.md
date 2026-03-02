@@ -2,93 +2,87 @@
 
 ## In Scope
 
-The system operates on a controlled digital library (initially 30 books). It supports admin ingestion of books, indexing of extracted pages, and user search over the indexed content.
+The system operates on a controlled digital library (30 books, 5 domains). It supports ingestion of PDF books, BM25-based search over indexed pages, and data export — all via a Python backend.
 
 ### Features Included
 
-1. **Book Management**
-   - Admin uploads PDF books with metadata
-   - Store books and page-wise text in database
-   - View and manage book collection
+1. **Book Ingestion (`scripts/ingest_books.py`)**
+   - Scans `books/<domain>/` sub-folders for PDF files
+   - Extracts text page-by-page using PyMuPDF
+   - Falls back to Tesseract OCR for image-only pages
+   - Stores book metadata and page text in MongoDB
+   - Supports incremental runs (will not duplicate already-ingested books)
 
 2. **Text Extraction (OCR)**
-   - OCR processing for scanned PDF images
-   - Page-by-page text extraction using Tesseract OCR
-   - Image preprocessing for better OCR accuracy
-   - Handle multi-page PDF documents
-   - Error handling for unreadable pages
+   - Page-by-page text extraction using PyMuPDF (fitz)
+   - OCR fallback via Tesseract for pages with fewer than 50 characters
+   - PDF pages rasterised at 200 DPI before OCR
+   - Error handling: OCR failures are logged; ingestion continues
 
-3. **Indexing System**
-   - Build inverted index over pages
-   - Tokenization and normalization
-   - Stopword removal
-   - Term frequency calculation
-   - Document frequency tracking
+3. **Indexing System (`scripts/build_index.py`)**
+   - Builds inverted index from all pages in MongoDB
+   - Tokenisation: lowercase + alphanumeric-only filter
+   - Posting lists: `term → {page_id: term_frequency}` (dict of dicts)
+   - Stores document lengths and books metadata map
+   - Serialised to `backend/data/search_index.pkl`
 
-4. **Search & Ranking**
-   - Process user queries (normalize, tokenize)
-   - Rank results using TF-IDF algorithm
-   - Return top-K results with book metadata and page number
-   - Generate snippets with context
+4. **Search & Ranking (`backend/main.py`)**
+   - Tokenises and normalises query
+   - BM25 scoring (k1=1.5, b=0.75) over inverted index
+   - Top-200 BM25 candidates → single batch MongoDB fetch
+   - Proximity bonus (+50/+30/+10) for terms appearing close together
+   - Exact-phrase bonus (+100) for verbatim match in page text
+   - Returns top-10 results with title, domain, page number, score, and preview
 
-5. **User Features**
-   - Text-based search interface
-   - View search results with scores
-   - Page preview with highlighted terms
-   - Search history
+5. **Data Export (`scripts/export_data.py`)**
+   - Exports book metadata and page metadata (no text) to CSV
+   - Output written to `dataset/books.csv` and `dataset/pages.csv`
 
-6. **Admin Features**
-   - PDF upload and processing
-   - Index build/rebuild
-   - View search logs and analytics
-
-7. **Security**
-   - Authentication (registration/login)
-   - Role-based access control (Admin/User)
-   - Protected admin routes
-
-8. **Analysis & Testing**
-   - Performance measurement (index time, search time, index size)
-   - Evaluation scripts for accuracy testing
-   - Unit and integration tests
+6. **Testing**
+   - 32 unit tests covering tokenizer, BM25 scorer, proximity scorer, exact-phrase check, enhanced search, and index loader
+   - 24 integration tests covering DB connectivity, document counts, document structure, and full search pipeline
+   - Run with `pytest tests/`
 
 ## Out of Scope
 
-1. Searching the whole internet or external web pages
-2. Copyright-violating distribution of full book PDFs to public
-3. Real-time collaborative features
-4. Mobile application development
-5. Advanced NLP features (summarization, translation, etc.)
-6. Handwritten text recognition (only printed text via OCR)
+1. Web or REST API frontend (no HTTP server implemented)
+2. User authentication, registration, or role management
+3. Search history or per-user features
+4. Searching external web pages or public internet
+5. Copyright-violating public distribution of book PDFs
+6. Real-time collaborative features
+7. Mobile application development
+8. Advanced NLP (summarisation, translation, semantic search)
+9. Handwritten text recognition (only printed OCR text)
 
 ## Assumptions
 
-1. Books are available as scanned PDF images (requiring OCR processing)
-2. PDFs contain printed text (not handwritten)
-3. Admin has permission to store and process the book texts for academic purposes
-4. Dataset is in English language
-5. Books have reasonable scan quality (readable by OCR)
-6. Users have basic computer literacy
-7. System will be deployed on local/university network (not public internet initially)
-8. Tesseract OCR or equivalent is available on server
+1. PDF files are organised under `books/<domain>/` sub-folders (e.g. `books/History/`)
+2. Books contain printed text (not handwritten)
+3. Admin has permission to store and process book texts for academic purposes
+4. Dataset is in English
+5. Books have reasonable scan quality for OCR
+6. MongoDB is running on `localhost:27017`
+7. Tesseract OCR is installed at `C:\Program Files\Tesseract-OCR\tesseract.exe`
+8. Python 3.10+ is available in the environment
 
 ## Limitations
 
-1. **OCR Accuracy**: OCR may introduce errors for poor quality scans, unusual fonts, or low-resolution images
-2. **OCR Processing Time**: Text extraction via OCR is slower than parsing machine-readable PDFs
-3. **Lexical Matching**: TF-IDF handles lexical similarity; paraphrased or semantically similar text may not match well
-4. **Page Boundary Detection**: PDF page extraction relies on PDF structure
-5. **Language**: Currently supports English only
-6. **Scale**: Optimized for medium-sized collections (100-1000 books)
-7. **Real-time Updates**: Index must be rebuilt after adding new books (not incremental)
-8. **Special Characters**: Mathematical symbols, tables, or complex layouts may not OCR accurately
+1. **OCR Accuracy**: Errors may occur for poor-quality scans, unusual fonts, or low-resolution images
+2. **OCR Processing Time**: OCR is significantly slower than native PDF text extraction
+3. **Lexical Matching Only**: BM25 matches exact tokens; paraphrased or semantically equivalent queries may score lower
+4. **Batch Index Rebuild**: Index must be fully rebuilt after adding new books (no incremental update)
+5. **Language**: English only
+6. **Scale**: Optimised for small-to-medium collections (up to ~1 000 books / ~100 000 pages)
+7. **Special Characters**: Tables, mathematical symbols, and complex layouts may not OCR accurately
 
 ## Future Enhancements (Out of Current Scope)
 
-- Incremental index updates
+- REST API layer (Flask/FastAPI) for web or mobile access
+- Incremental index updates without full rebuild
 - Multi-language support
-- Semantic search capabilities
+- Semantic / embedding-based search
 - Book recommendation system
-- Citation detection and linking
-- Export/download features
+- Web-based search UI
 - Advanced analytics dashboard
+- Export of highlighted page PDFs

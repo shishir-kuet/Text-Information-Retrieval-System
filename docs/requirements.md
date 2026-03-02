@@ -2,111 +2,67 @@
 
 ## Functional Requirements (FR)
 
-### User Management
-
-**FR-1: User Registration**
-
-- Users can register with name, email, and password
-- Email must be unique
-- Password must be securely hashed
-- Default role: "user"
-
-**FR-2: User Login**
-
-- Users can login with email and password
-- System generates JWT token for authenticated sessions
-- Token expires after 7 days
-
-**FR-3: Role Management**
-
-- Two roles: Admin and User
-- Admins have access to management features
-- Users have access to search features
-
 ### Search Functionality
 
-**FR-4: Text-Based Search**
+**FR-1: Text-Based Search**
 
-- User can submit a sentence/paragraph as query
-- System processes and normalizes the query
-- Minimum 1 character required
+- User submits a sentence or paragraph as a query via the CLI
+- System tokenises and normalises the query (lowercase, remove punctuation)
+- Minimum 1 valid token required
 
-**FR-5: Search Results**
+**FR-2: Search Results**
 
-- System returns top-K matches (default K=5, configurable up to 20)
+- System returns the top-10 best-matching pages
 - Each result includes:
-  - Book title, author, year
+  - Book title and domain (subject area)
   - Page number
-  - Relevance score
-  - Text snippet with context
-  - Matched terms list
+  - BM25 relevance score (with proximity and exact-phrase bonuses)
+  - Text preview (first 300 characters of the page)
 
-**FR-6: Page Preview**
+**FR-3: Page Preview**
 
-- User can click a result to open full page text
-- System highlights matched query terms
-- Shows book metadata and page number
+- Each result displays a text snippet from the matched page
+- Shows book metadata (title, domain) and page number alongside the snippet
 
-**FR-7: Search History**
+### Book Ingestion
 
-- Logged-in users can view their past queries
-- Shows query text, timestamp, and number of results
-- Limited to last 50 searches
+**FR-4: Book Ingestion Script**
 
-### Admin Features
+- `scripts/ingest_books.py` scans `books/<domain>/` sub-folders for PDF files
+- Each PDF is processed page-by-page and stored in MongoDB
+- Text-based PDFs use PyMuPDF (fitz) for fast extraction
+- Only PDF format processed; other file types ignored
 
-**FR-8: Book Upload**
+**FR-5: OCR Text Extraction**
 
-- Admin can upload PDF file with metadata:
-  - Title (required)
-  - Author (optional)
-  - Year (optional)
-  - Source (optional)
-- Maximum file size: 25MB
-- Only PDF format accepted
+- Pages with fewer than 50 characters from normal extraction trigger OCR fallback
+- Tesseract OCR converts the page image (200 DPI) to text
+- OCR errors are logged and handled gracefully (page stored with empty text)
+- Supports incremental ingestion: existing books are not duplicated
 
-**FR-9: OCR Text Extraction**
+**FR-6: Index Build**
 
-- System automatically performs OCR on scanned PDF pages
-- Converts PDF pages to images first
-- Applies OCR (Tesseract) to extract text from each page
-- Handles multi-page PDFs automatically
-- Stores each page as separate document with extracted text
-- Calculates token count per page
-- Reports OCR confidence/quality metrics
-- Handles OCR errors gracefully (logs unreadable pages)
+- `scripts/build_index.py` reads all pages from MongoDB and builds the inverted index
+- Index includes:
+  - Inverted index: `term → {page_id: term_frequency}`
+  - Term frequencies per document
+  - Document lengths (token counts)
+  - Books metadata map (`page_id → {title, page_number, domain}`)
+- Index is saved to `backend/data/search_index.pkl`
+- Build time and total unique terms are reported
 
-**FR-10: Index Management**
+**FR-7: Data Export**
 
-- Admin can build/rebuild inverted index
-- System process all pages and creates:
-  - Term dictionary
-  - Posting lists (term → page mappings)
-  - Term frequency (TF) per page
-  - Document frequency (DF) per term
-- Shows build time and total terms indexed
-
-**FR-11: Book Management**
-
-- Admin can view all books with metadata
-- Filter books by status (uploaded/processed/indexed)
-- Search books by title or author
-
-**FR-12: Search Logs & Analytics**
-
-- Admin can view all search logs
-- Filter logs by query text
-- Shows user, query, timestamp, and top results
+- `scripts/export_data.py` exports book and page metadata to CSV files in `dataset/`
+- Page text content is excluded from the export (metadata only)
 
 ### System Logging
 
-**FR-13: Search Logging**
+**FR-8: Operational Logging**
 
-- System records every search with:
-  - User ID (if logged in)
-  - Query text
-  - Timestamp
-  - Top results (book, page, score)
+- All services use the centralised `utils/logger.py` logger
+- INFO-level logs for normal operations (ingestion progress, index build, search)
+- WARNING/ERROR logs for OCR failures, missing files, and unexpected exceptions
 
 ---
 
@@ -116,150 +72,91 @@
 
 **NFR-1: Search Response Time**
 
-- Search queries should return results within 2 seconds for 95% of requests
-- Performance should remain acceptable as dataset grows
-- Must measure and report latency vs. dataset size
+- Search queries must return results within 2 seconds on the full 30-book / ~16 000-page collection
+- BM25 candidate set is limited to top-200 before the MongoDB batch fetch to bound latency
+- Performance must be measured and reported (latency vs. dataset size)
 
 **NFR-2: Index Build Time**
 
-- Index building should be feasible for medium-sized collections
-- Must measure and report build time vs. number of pages
-- Progress indication required for long operations
+- Index building must complete in a reasonable time for medium-sized collections
+- Progress must be logged every 1 000 pages
+- Build time and total unique terms must be reported on completion
 
-**NFR-3: Concurrent Users**
+**NFR-3: Memory & Storage Efficiency**
 
-- System should handle at least 10 concurrent users
-- No significant performance degradation under load
-
-### Scalability
-
-**NFR-4: Dataset Growth**
-
-- Indexing pipeline should support adding more books without code changes
-- Database schema should accommodate growing data
-- Index structure should scale sub-linearly
-
-**NFR-5: Storage Efficiency**
-
-- Index size should be monitored and optimized
-- Compressed storage for large text fields where appropriate
+- Index file size should be monitored and kept reasonable
+- Inverted index uses `{page_id: tf}` dicts (compact representation)
+- Index stored as a single `.pkl` file under `backend/data/`
 
 ### Reliability
 
-**NFR-6: Error Handling**
+**NFR-4: Error Handling**
 
-- System handles invalid PDFs gracefully
-- Empty queries rejected with clear error message
-- Malformed requests return appropriate HTTP status codes
-- Server errors logged and reported without exposing internals
+- Invalid or unreadable PDFs handled gracefully (logged, ingestion continues)
+- Empty queries rejected before search executes
+- OCR failures logged without stopping the ingestion pipeline
 
-**NFR-7: Data Integrity**
+**NFR-5: Data Integrity**
 
-- No duplicate book uploads (filename uniqueness)
-- No duplicate pages per book (bookId + pageNumber uniqueness)
-- Atomic operations for critical workflows
-
-### Security
-
-**NFR-8: Authentication**
-
-- JWT-based authentication
-- Secure password hashing (bcrypt with salt rounds ≥10)
-- Token expiration enforced
-
-**NFR-9: Authorization**
-
-- Role-based access control enforced
-- Admin routes protected (401/403 responses)
-- User data isolation (users can only see own history)
-
-**NFR-10: Input Validation**
-
-- All user inputs validated before processing
-- File upload size limits enforced
-- SQL/NoSQL injection prevention
-
-**NFR-11: Rate Limiting**
-
-- API rate limiting (120 requests/minute per IP)
-- Prevents abuse and ensures fair usage
+- Incremental ingestion prevents duplicate books (checks existing `book_id`)
+- Each page has a unique `page_id` (`<book_id>_<page_number>`)
+- `page_id` field is indexed in MongoDB for fast batch lookups
 
 ### Maintainability
 
-**NFR-12: Code Quality**
+**NFR-6: Code Quality**
 
-- Clean modular codebase with separation of concerns
-- Consistent naming conventions
-- Self-documenting code structure
-- No hardcoded credentials or secrets
+- Layered Python architecture: `config/`, `models/`, `services/`, `utils/`
+- Each service has a single responsibility (tokenizer, search, index, ingestion)
+- No hardcoded credentials; MongoDB URI is defined in `config/db.py`
+- Consistent naming conventions following PEP 8
 
-**NFR-13: Documentation**
+**NFR-7: Documentation**
 
-- API endpoints documented
-- Code comments for complex algorithms
-- README with setup instructions
-- Architecture diagrams maintained
+- Algorithms (BM25, proximity scoring) documented with inline comments
+- System requirements, scope, and problem statement maintained in `docs/`
+- README covers setup and usage instructions
 
-**NFR-14: Version Control**
+**NFR-8: Version Control**
 
-- Professional Git workflow (branches, PRs, reviews)
-- Meaningful commit messages (conventional commits)
-- No direct commits to main branch
-
-### Usability
-
-**NFR-15: User Interface**
-
-- Simple and intuitive UI
-- Responsive design for different screen sizes
-- Clear feedback for user actions
-- Error messages are user-friendly
-
-**NFR-16: Admin Interface**
-
-- Clear upload progress indication
-- Status messages for operations
-- Confirmation for destructive actions
+- Professional Git workflow (branches, meaningful commits)
+- No secrets or large binaries committed to the repository
 
 ### Testability
 
-**NFR-17: Unit Testing**
+**NFR-9: Unit Testing**
 
-- Core modules (tokenizer, indexer, scorer) must be unit-testable
-- Test coverage for critical business logic
+- Core modules (tokenizer, BM25 scorer, proximity scorer, index loader) have dedicated unit tests
+- Tests use mocks for MongoDB to run without a live database
+- Minimum 30 unit test cases covering normal and edge cases
 
-**NFR-18: Integration Testing**
+**NFR-10: Integration Testing**
 
-- End-to-end workflows testable
-- API endpoints testable independently
-
-**NFR-19: Evaluation Framework**
-
-- Automated accuracy testing with test cases
-- Metrics: Top-1/Top-5 accuracy, MRR
-- Performance benchmarking scripts
+- Integration tests connect to the real MongoDB instance (read-only)
+- Tests verify: DB connectivity, document counts, document structure, batch fetch, full search pipeline
+- Minimum 20 integration test cases
 
 ### Deployment
 
-**NFR-20: Environment Configuration**
+**NFR-11: Environment Configuration**
 
-- Configuration via environment variables
-- No secrets in codebase
-- Clear deployment documentation
+- MongoDB URI and DB name configurable in `backend/src/config/db.py`
+- Index path configurable via `Path` constants in each service
+- No secrets committed to the repository
 
-**NFR-21: Cross-Platform**
+**NFR-12: Cross-Platform**
 
+- Python 3.10+ compatible
 - Works on Windows, Linux, macOS
-- Database connection configurable (local/cloud)
+- Tesseract path configurable in `ingestion_service.py`
 
 ---
 
 ## Constraints
 
-1. Must use Node.js/Express for backend
-2. Must use React for frontend
-3. Must use MongoDB for database
-4. Must NOT use AI/ML libraries for core search functionality
-5. Must demonstrate professional GitHub workflow
-6. Must complete within 6-month timeframe
-7. Two-team member collaboration required
+1. Must use Python for backend
+2. Must use MongoDB for database
+3. Must NOT use AI/ML libraries for core search functionality (BM25 algorithm only)
+4. Must include unit and integration tests (pytest)
+5. Must demonstrate a professional, layered codebase structure
+6. Must complete within the project timeframe

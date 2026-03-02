@@ -1,48 +1,29 @@
-import json
-import re
-import math
-from collections import defaultdict, Counter
-import pickle
+"""
+scripts/build_index.py
+Build the BM25 search index from MongoDB and save to backend/data/.
 
-# -------- LOAD PAGES JSON --------
-with open("american_revolution_pages.json", "r", encoding="utf-8") as f:
-    pages = json.load(f)
+Usage (from project root):
+    python scripts/build_index.py
+"""
 
-# -------- TEXT PREPROCESSING --------
-def tokenize(text):
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    return text.split()
+import sys
+from pathlib import Path
 
-# -------- DATA STRUCTURES --------
-inverted_index = defaultdict(list)   # term → pages
-term_freqs = {}                      # page → Counter(term)
-doc_lengths = {}                     # page → length
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-# -------- BUILD INDEX --------
-for page_no, text in pages.items():
-    tokens = tokenize(text)
-    freq = Counter(tokens)
+from backend.src.config.db import get_db
+from backend.src.services.index_service import build_index
+from backend.src.utils.logger import get_logger
 
-    term_freqs[int(page_no)] = freq
-    doc_lengths[int(page_no)] = sum(freq.values())
+INDEX_PATH = PROJECT_ROOT / "backend" / "data" / "search_index.pkl"
 
-    for term in freq:
-        inverted_index[term].append(int(page_no))
-
-N = len(pages)
-
-# -------- SAVE INDEX --------
-index_data = {
-    "pages": pages,
-    "inverted_index": dict(inverted_index),
-    "term_freqs": term_freqs,
-    "doc_lengths": doc_lengths,
-    "N": N
-}
-
-with open("index.pkl", "wb") as f:
-    pickle.dump(index_data, f)
-
-print("Index built successfully.")
-print("Total pages indexed:", N)
+if __name__ == "__main__":
+    logger = get_logger(__name__)
+    db = get_db()
+    logger.info("Building search index...")
+    payload = build_index(db, index_path=INDEX_PATH)
+    logger.info(
+        f"Index saved to {INDEX_PATH} -- "
+        f"{payload['N']} pages, {len(payload['inverted_index'])} terms."
+    )
