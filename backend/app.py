@@ -24,6 +24,8 @@ from backend.src.services.index_service import load_index
 from backend.src.services.search_service import enhanced_search
 from backend.src.services.tokenizer_service import tokenize
 from backend.src.utils.logger import get_logger
+from backend.src.models.page import PageModel
+from backend.src.models.book import BookModel
 
 INDEX_PATH = Path(__file__).resolve().parent / "data" / "search_index.pkl"
 
@@ -101,6 +103,56 @@ def search():
         "query": query,
         "total_results": len(results),
         "results": results,
+    }), 200
+
+
+@app.route("/api/page/<page_id>", methods=["GET"])
+def get_page(page_id):
+    db = _get_db()
+    idx = _get_index()
+
+    # Fetch the full page document (including book_id)
+    page_doc = db["pages"].find_one(
+        {"page_id": page_id},
+        {"page_id": 1, "text_content": 1, "display_page_number": 1, "book_id": 1, "page_number": 1, "_id": 0}
+    )
+    if not page_doc:
+        return jsonify({"error": "Page not found"}), 404
+
+    book_id = page_doc.get("book_id", "")
+    current_page_num = page_doc.get("page_number", 0)
+
+    # Get book metadata (author, year, title, domain) from MongoDB
+    book_doc = db["books"].find_one(
+        {"book_id": book_id},
+        {"book_title": 1, "title": 1, "author": 1, "year": 1, "domain": 1, "_id": 0}
+    ) or {}
+
+    # books_metadata in index for display_page_number fallback
+    meta = idx["books_metadata"].get(page_id, {})
+    book_title = book_doc.get("book_title") or book_doc.get("title") or meta.get("book_title", "Unknown")
+
+    # Find adjacent pages by querying MongoDB pages collection
+    prev_page = db["pages"].find_one(
+        {"book_id": book_id, "page_number": current_page_num - 1},
+        {"page_id": 1, "_id": 0}
+    )
+    next_page = db["pages"].find_one(
+        {"book_id": book_id, "page_number": current_page_num + 1},
+        {"page_id": 1, "_id": 0}
+    )
+
+    return jsonify({
+        "page_id": page_id,
+        "text_content": page_doc.get("text_content", ""),
+        "display_page_number": page_doc.get("display_page_number") or meta.get("display_page_number", str(current_page_num)),
+        "book_title": book_title,
+        "author": book_doc.get("author", ""),
+        "year": str(book_doc.get("year", "")),
+        "domain": book_doc.get("domain") or meta.get("domain", ""),
+        "page_number": current_page_num,
+        "prev_page_id": prev_page["page_id"] if prev_page else None,
+        "next_page_id": next_page["page_id"] if next_page else None,
     }), 200
 
 

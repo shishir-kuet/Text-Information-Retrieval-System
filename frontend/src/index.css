@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --color-tirs-bg: #393A3A;
+  --color-tirs-card: #575959;
+  --color-tirs-orange: #F89344;
+  --color-tirs-red: #FF642F;
+  --color-tirs-text: #F4F4F4;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }

@@ -1,0 +1,585 @@
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { ArrowLeft, BookOpen, FileText, Star, ChevronRight, Loader2, AlertCircle, User, Calendar } from "lucide-react";
+import { motion } from "motion/react";
+
+const COLORS = {
+  bg: "#393A3A",
+  card: "#575959",
+  orange: "#F89344",
+  red: "#FF642F",
+  text: "#F4F4F4",
+};
+
+export interface SearchResult {
+  page_id: string;
+  score: number;
+  book_title: string;
+  page_number: number | string;
+  display_page_number: string;
+  domain: string;
+  preview: string;
+}
+
+const STOPWORDS = new Set([
+  "the","a","an","is","in","of","to","and","or","for","with","on","at",
+  "by","from","that","this","it","as","be","was","are","were","has","have",
+  "not","but","what","which","who","if","then","than","so","no","up","do",
+  "did","can","will","just","its","are","how","about",
+]);
+
+export function getMatchedTerms(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+}
+
+export function highlightText(text: string, terms: string[]): string {
+  if (!terms.length) return text;
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const regex = new RegExp(`(${escaped.join("|")})`, "gi");
+  return text.replace(
+    regex,
+    `<mark style="background:${COLORS.orange};color:#fff;padding:0 3px;border-radius:3px">$1</mark>`
+  );
+}
+
+export function normalizeScore(score: number, maxScore: number): number {
+  if (maxScore === 0) return 0;
+  return Math.min(100, (score / maxScore) * 100);
+}
+
+export default function Results() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const query = searchParams.get("q") || "";
+  const topK = parseInt(searchParams.get("k") || "5", 10);
+
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [totalFound, setTotalFound] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        const all: SearchResult[] = data.results ?? [];
+        setResults(all.slice(0, topK));
+        setTotalFound(data.total_results ?? all.length);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        setError("Could not connect to the backend. Make sure the Flask server is running on port 5000.");
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [query, topK]);
+
+  const matchedTerms = getMatchedTerms(query);
+  const maxScore = results.length > 0 ? results[0].score : 1;
+
+  return (
+    <div style={{ minHeight: "100vh", backgroundColor: COLORS.bg }}>
+
+      {/* Header */}
+      <header style={{ backgroundColor: COLORS.card, borderBottom: `3px solid ${COLORS.orange}` }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 32px" }}>
+          <button
+            onClick={() => navigate("/")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 18,
+              padding: "8px 18px",
+              borderRadius: 8,
+              border: `1.5px solid ${COLORS.text}`,
+              background: "transparent",
+              color: "#fff",
+              fontSize: 14,
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            <ArrowLeft size={15} /> Back to Search
+          </button>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h1 style={{ color: "#fff", fontSize: 30, fontWeight: 800, margin: "0 0 6px" }}>
+                Search Results
+              </h1>
+              <p style={{ color: COLORS.text, margin: 0, fontSize: 16 }}>
+                Query:{" "}
+                <span style={{ fontWeight: 700, color: COLORS.orange }}>"{query}"</span>
+              </p>
+            </div>
+            {!loading && !error && (
+              <p style={{ color: COLORS.text, fontSize: 15, margin: 0 }}>
+                Top {topK} results &bull;{" "}
+                <span style={{ color: COLORS.orange, fontWeight: 700 }}>{Math.min(totalFound, topK)} found</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Body */}
+      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "36px 32px 72px" }}>
+
+        {/* Loading */}
+        {loading && (
+          <div style={{ textAlign: "center", paddingTop: 80 }}>
+            <Loader2 size={52} color={COLORS.orange} style={{ animation: "spin 1s linear infinite", margin: "0 auto 16px" }} />
+            <p style={{ color: COLORS.text, fontSize: 17 }}>Searching…</p>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {/* Error */}
+        {!loading && error && (
+          <div style={{ textAlign: "center", paddingTop: 80 }}>
+            <AlertCircle size={52} color={COLORS.red} style={{ margin: "0 auto 16px" }} />
+            <h3 style={{ color: "#fff", fontSize: 22, fontWeight: 700, marginBottom: 10 }}>Backend Unavailable</h3>
+            <p style={{ color: COLORS.text, maxWidth: 480, margin: "0 auto", fontSize: 15 }}>{error}</p>
+          </div>
+        )}
+
+        {/* No results */}
+        {!loading && !error && results.length === 0 && query.trim() && (
+          <div style={{ textAlign: "center", paddingTop: 80 }}>
+            <BookOpen size={56} color={COLORS.orange} style={{ margin: "0 auto 16px" }} />
+            <h3 style={{ color: "#fff", fontSize: 26, fontWeight: 700, marginBottom: 10 }}>No results found</h3>
+            <p style={{ color: COLORS.text, fontSize: 16 }}>Try different or broader search terms.</p>
+          </div>
+        )}
+
+        {/* Results list */}
+        {!loading && !error && results.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+            {results.map((result, index) => {
+              const pct = normalizeScore(result.score, maxScore);
+              return (
+                <motion.div
+                  key={result.page_id}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: index * 0.07 }}
+                >
+                  <div
+                    onClick={() => navigate(`/page/${result.page_id}?q=${encodeURIComponent(query)}`)}
+                    style={{
+                      backgroundColor: COLORS.card,
+                      borderRadius: 16,
+                      padding: "28px 32px",
+                      border: `2px solid ${COLORS.orange}`,
+                      cursor: "pointer",
+                      transition: "box-shadow 0.2s",
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
+
+                      {/* Rank badge */}
+                      <div style={{
+                        width: 56, height: 56, borderRadius: 14, flexShrink: 0,
+                        backgroundColor: COLORS.orange, display: "flex",
+                        alignItems: "center", justifyContent: "center",
+                        fontWeight: 900, fontSize: 24, color: "#fff",
+                      }}>
+                        {index + 1}
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+
+                        {/* Title row + Score */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 12 }}>
+                          <h3 style={{ color: "#fff", fontSize: 22, fontWeight: 800, margin: 0, lineHeight: 1.3 }}>
+                            {result.book_title}
+                          </h3>
+
+                          {/* Score badge */}
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "flex-end" }}>
+                              <Star size={18} color={COLORS.orange} fill={COLORS.orange} />
+                              <span style={{ color: "#fff", fontWeight: 800, fontSize: 20 }}>
+                                {pct.toFixed(1)}%
+                              </span>
+                            </div>
+                            <p style={{ color: COLORS.text, fontSize: 13, margin: 0 }}>Relevance</p>
+                          </div>
+                        </div>
+
+                        {/* Metadata row */}
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                          {result.domain && result.domain !== "Unknown" && (
+                            <span style={{
+                              fontSize: 13, fontWeight: 600, padding: "3px 12px",
+                              borderRadius: 20, backgroundColor: "rgba(248,147,68,0.15)",
+                              color: COLORS.orange, border: `1px solid ${COLORS.orange}`,
+                            }}>
+                              {result.domain}
+                            </span>
+                          )}
+                          <span style={{ color: COLORS.text, fontSize: 13 }}>&bull;</span>
+                          <span style={{
+                            display: "flex", alignItems: "center", gap: 5,
+                            fontSize: 13, fontWeight: 600, padding: "4px 12px",
+                            borderRadius: 20, backgroundColor: COLORS.red, color: "#fff",
+                          }}>
+                            <FileText size={13} /> Page {result.display_page_number}
+                          </span>
+                        </div>
+
+                        {/* Preview snippet */}
+                        <div style={{ backgroundColor: COLORS.bg, borderRadius: 10, padding: "14px 18px", marginBottom: 14 }}>
+                          <p
+                            style={{ color: COLORS.text, fontSize: 15, lineHeight: 1.75, margin: 0 }}
+                            dangerouslySetInnerHTML={{ __html: highlightText(result.preview, matchedTerms) }}
+                          />
+                        </div>
+
+                        {/* Matched terms */}
+                        {matchedTerms.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                            <span style={{ color: COLORS.text, fontSize: 14, fontWeight: 600 }}>Matched terms:</span>
+                            {matchedTerms.map((term) => (
+                              <span key={term} style={{
+                                fontSize: 13, padding: "3px 12px", borderRadius: 20,
+                                border: `1.5px solid ${COLORS.orange}`, color: COLORS.text,
+                                backgroundColor: "transparent",
+                              }}>
+                                {term}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* View full page */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, color: COLORS.orange, fontSize: 15, fontWeight: 700 }}>
+                          View full page <ChevronRight size={16} />
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+
+      </main>
+    </div>
+  );
+}
+
+
+const COLORS = {
+  bg: "#393A3A",
+  card: "#575959",
+  orange: "#F89344",
+  red: "#FF642F",
+  text: "#F4F4F4",
+};
+
+export interface SearchResult {
+  page_id: string;
+  score: number;
+  book_title: string;
+  page_number: number | string;
+  display_page_number: string;
+  domain: string;
+  preview: string;
+}
+
+const STOPWORDS = new Set([
+  "the","a","an","is","in","of","to","and","or","for","with","on","at",
+  "by","from","that","this","it","as","be","was","are","were","has","have",
+  "not","but","what","which","who","if","then","than","so","no","up","do",
+  "did","can","will","just","its","are","how","about",
+]);
+
+export function getMatchedTerms(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+}
+
+export function highlightText(text: string, terms: string[]): string {
+  if (!terms.length) return text;
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const regex = new RegExp(`(${escaped.join("|")})`, "gi");
+  return text.replace(
+    regex,
+    `<mark style="background:${COLORS.orange};color:#fff;padding:0 3px;border-radius:3px">$1</mark>`
+  );
+}
+
+export function normalizeScore(score: number, maxScore: number): number {
+  if (maxScore === 0) return 0;
+  return Math.min(100, (score / maxScore) * 100);
+}
+
+export default function Results() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const query = searchParams.get("q") || "";
+  const topK = parseInt(searchParams.get("k") || "5", 10);
+
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [totalFound, setTotalFound] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        const all: SearchResult[] = data.results ?? [];
+        setResults(all.slice(0, topK));
+        setTotalFound(data.total_results ?? all.length);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        setError("Could not connect to the backend. Make sure the Flask server is running on port 5000.");
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [query, topK]);
+
+  const matchedTerms = getMatchedTerms(query);
+  const maxScore = results.length > 0 ? results[0].score : 1;
+
+  return (
+    <div style={{ minHeight: "100vh", backgroundColor: COLORS.bg }}>
+
+      {/* Header */}
+      <header style={{ backgroundColor: COLORS.card, borderBottom: `2px solid ${COLORS.orange}` }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 32px" }}>
+          <button
+            onClick={() => navigate("/")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+              padding: "7px 16px",
+              borderRadius: 8,
+              border: `1px solid ${COLORS.text}`,
+              background: "transparent",
+              color: "#fff",
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={15} /> Back to Search
+          </button>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h1 style={{ color: "#fff", fontSize: 26, fontWeight: 700, margin: 0, marginBottom: 4 }}>
+                Search Results
+              </h1>
+              <p style={{ color: COLORS.text, margin: 0 }}>
+                Query:{" "}
+                <span style={{ fontWeight: 700, color: COLORS.orange }}>"{query}"</span>
+              </p>
+            </div>
+            {!loading && !error && (
+              <p style={{ color: COLORS.text, fontSize: 14, margin: 0 }}>
+                Top {topK} results &bull; {Math.min(totalFound, topK)} found
+              </p>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Body */}
+      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 32px 60px" }}>
+
+        {/* Loading */}
+        {loading && (
+          <div style={{ textAlign: "center", paddingTop: 80 }}>
+            <Loader2 size={48} color={COLORS.orange} style={{ animation: "spin 1s linear infinite", margin: "0 auto 16px" }} />
+            <p style={{ color: COLORS.text, fontSize: 16 }}>Searching…</p>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {/* Error */}
+        {!loading && error && (
+          <div style={{ textAlign: "center", paddingTop: 80 }}>
+            <AlertCircle size={48} color={COLORS.red} style={{ margin: "0 auto 16px" }} />
+            <h3 style={{ color: "#fff", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Backend Unavailable</h3>
+            <p style={{ color: COLORS.text, maxWidth: 480, margin: "0 auto" }}>{error}</p>
+          </div>
+        )}
+
+        {/* No results */}
+        {!loading && !error && results.length === 0 && query.trim() && (
+          <div style={{ textAlign: "center", paddingTop: 80 }}>
+            <BookOpen size={52} color={COLORS.orange} style={{ margin: "0 auto 16px" }} />
+            <h3 style={{ color: "#fff", fontSize: 24, fontWeight: 700, marginBottom: 8 }}>No results found</h3>
+            <p style={{ color: COLORS.text }}>Try different or broader search terms.</p>
+          </div>
+        )}
+
+        {/* Results list */}
+        {!loading && !error && results.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {results.map((result, index) => {
+              const pct = normalizeScore(result.score, maxScore);
+              return (
+                <motion.div
+                  key={result.page_id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: index * 0.07 }}
+                >
+                  <div
+                    onClick={() => navigate(`/page/${result.page_id}`)}
+                    style={{
+                      backgroundColor: COLORS.card,
+                      borderRadius: 16,
+                      padding: 28,
+                      border: `2px solid ${COLORS.orange}`,
+                      cursor: "pointer",
+                      transition: "box-shadow 0.2s",
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+
+                      {/* Rank badge */}
+                      <div style={{
+                        width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                        backgroundColor: COLORS.orange, display: "flex",
+                        alignItems: "center", justifyContent: "center",
+                        fontWeight: 800, fontSize: 20, color: "#fff",
+                      }}>
+                        {index + 1}
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+
+                        {/* Title row */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <h3 style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "0 0 8px" }}>
+                              {result.book_title}
+                            </h3>
+                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                              {result.domain && result.domain !== "Unknown" && (
+                                <span style={{
+                                  fontSize: 12, fontWeight: 600, padding: "2px 10px",
+                                  borderRadius: 20, backgroundColor: "rgba(248,147,68,0.18)",
+                                  color: COLORS.orange, border: `1px solid ${COLORS.orange}`,
+                                }}>
+                                  {result.domain}
+                                </span>
+                              )}
+                              <span style={{ color: COLORS.text, fontSize: 13 }}>&bull;</span>
+                              <span style={{
+                                display: "flex", alignItems: "center", gap: 5,
+                                fontSize: 12, fontWeight: 600, padding: "3px 10px",
+                                borderRadius: 20, backgroundColor: COLORS.red, color: "#fff",
+                              }}>
+                                <FileText size={12} /> Page {result.display_page_number}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Score */}
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
+                              <Star size={16} color={COLORS.orange} fill={COLORS.orange} />
+                              <span style={{ color: "#fff", fontWeight: 700, fontSize: 18 }}>
+                                {pct.toFixed(1)}%
+                              </span>
+                            </div>
+                            <p style={{ color: COLORS.text, fontSize: 12, margin: 0 }}>Relevance</p>
+                          </div>
+                        </div>
+
+                        {/* Preview snippet */}
+                        <div style={{ backgroundColor: COLORS.bg, borderRadius: 10, padding: "12px 16px", marginBottom: 12 }}>
+                          <p
+                            style={{ color: COLORS.text, fontSize: 14, lineHeight: 1.7, margin: 0 }}
+                            dangerouslySetInnerHTML={{ __html: highlightText(result.preview, matchedTerms) }}
+                          />
+                        </div>
+
+                        {/* Matched terms */}
+                        {matchedTerms.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                            <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 500 }}>Matched terms:</span>
+                            {matchedTerms.map((term) => (
+                              <span key={term} style={{
+                                fontSize: 12, padding: "2px 10px", borderRadius: 20,
+                                border: `1px solid ${COLORS.orange}`, color: COLORS.text,
+                                backgroundColor: "transparent",
+                              }}>
+                                {term}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* View full page */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, color: COLORS.orange, fontSize: 14, fontWeight: 600 }}>
+                          View full page <ChevronRight size={15} />
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+
+      </main>
+    </div>
+  );
+}
