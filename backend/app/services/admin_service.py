@@ -22,7 +22,7 @@ def _next_book_id(db) -> int:
     return int(last['book_id']) + 1
 
 
-def upload_book(file_storage, domain: str, title: str | None = None):
+def upload_book(file_storage, domain: str, title: str, author: str, year: str | None = None):
     ensure_schema_indexes()
     db = get_database()
     books = db['books']
@@ -32,6 +32,19 @@ def upload_book(file_storage, domain: str, title: str | None = None):
 
     if not domain:
         return None, "missing domain"
+
+    if not title or not title.strip():
+        return None, "missing title"
+
+    if not author or not author.strip():
+        return None, "missing author"
+
+    parsed_year = None
+    if year:
+        try:
+            parsed_year = int(year)
+        except (TypeError, ValueError):
+            return None, "invalid year"
 
     book_id = _next_book_id(db)
 
@@ -45,7 +58,7 @@ def upload_book(file_storage, domain: str, title: str | None = None):
 
     file_storage.save(target_path)
 
-    book_title = title.strip() if title else Path(original_filename).stem
+    book_title = title.strip()
 
     try:
         num_pages = get_pdf_page_count(target_path)
@@ -57,8 +70,8 @@ def upload_book(file_storage, domain: str, title: str | None = None):
     book_doc = {
         'book_id': book_id,
         'title': book_title,
-        'author': None,
-        'year': None,
+        'author': author.strip(),
+        'year': parsed_year,
         'domain': safe_domain,
         'file_name': original_filename,
         'stored_file_name': stored_file_name,
@@ -140,6 +153,49 @@ def process_book(book_id: int):
     finally:
         if doc is not None:
             doc.close()
+
+
+def process_uploaded_books():
+    ensure_schema_indexes()
+    db = get_database()
+    books = db['books']
+
+    uploaded = list(books.find({'status': BOOK_STATUS_UPLOADED}).sort('book_id', 1))
+    if not uploaded:
+        return {
+            'processed_count': 0,
+            'total_uploaded': 0,
+            'processed_book_ids': [],
+            'errors': [],
+            'message': 'No uploaded books to process',
+        }, None
+
+    processed_ids: list[int] = []
+    errors: list[dict] = []
+
+    for book in uploaded:
+        book_id = int(book.get('book_id'))
+        try:
+            result, err = process_book(book_id)
+            if err:
+                errors.append({'book_id': book_id, 'error': err})
+                continue
+            if result and result.get('book_id') is not None:
+                processed_ids.append(int(result['book_id']))
+        except Exception as exc:
+            errors.append({'book_id': book_id, 'error': str(exc)})
+
+    summary = f"Process completed ({len(processed_ids)}/{len(uploaded)})"
+    if errors:
+        summary = f"{summary} with {len(errors)} errors"
+
+    return {
+        'processed_count': len(processed_ids),
+        'total_uploaded': len(uploaded),
+        'processed_book_ids': processed_ids,
+        'errors': errors,
+        'message': summary,
+    }, None
 
 
 def build_index_and_update(full_rebuild: bool = False):

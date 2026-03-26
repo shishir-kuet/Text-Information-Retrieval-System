@@ -1,0 +1,6 @@
+flask
+pymongo
+PyMuPDF
+pytesseract
+pdf2image
+PyJWT

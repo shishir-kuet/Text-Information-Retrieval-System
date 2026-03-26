@@ -47,17 +47,20 @@ class SearchService:
         self.books = self.db["books"]
         self.index_file = SEARCH_INDEX_FILE
         self.index_data = None
+        self.index_mtime = None
 
     def load_index(self, force_reload: bool = False):
-        if self.index_data is not None and not force_reload:
-            return self.index_data
-
         index_path = Path(self.index_file)
         if not index_path.exists():
             raise FileNotFoundError(f"Index file not found: {index_path}")
 
+        mtime = index_path.stat().st_mtime
+        if self.index_data is not None and not force_reload and self.index_mtime == mtime:
+            return self.index_data
+
         with open(index_path, "rb") as f:
             self.index_data = pickle.load(f)
+            self.index_mtime = mtime
         return self.index_data
 
     def index_available(self):
@@ -184,6 +187,12 @@ class SearchService:
 
         page = ensure_page_document(raw_page)
         book = self.books.find_one({"book_id": page.get("book_id")}) or {}
+        num_pages = book.get("num_pages")
+        if not num_pages:
+            try:
+                num_pages = self.pages.count_documents({"book_id": page.get("book_id")})
+            except Exception:
+                num_pages = None
 
         return {
             "page_id": page.get("page_id"),
@@ -196,6 +205,9 @@ class SearchService:
                 "book_id": book.get("book_id"),
                 "title": book.get("title"),
                 "domain": book.get("domain"),
+                "author": book.get("author"),
+                "year": book.get("year"),
+                "num_pages": num_pages,
             },
         }
 

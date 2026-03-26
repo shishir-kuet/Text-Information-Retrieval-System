@@ -10,6 +10,7 @@ from backend.app.services.search_service import SearchService
 from backend.app.utils.api_response import error, success
 from backend.app.utils.auth import decode_token, get_current_user_optional
 from backend.app.utils.storage import resolve_pdf_path
+from pymongo.errors import PyMongoError
 
 
 bp = Blueprint("public", __name__, url_prefix="/api")
@@ -51,6 +52,10 @@ def search():
         results = search_service.search(query=query, top_k=top_k)
     except FileNotFoundError:
         return error("search index not found", status=503)
+    except PyMongoError:
+        return error("database unavailable", status=503)
+    except Exception:
+        return error("search failed", status=500)
 
     latency_ms = int((time.perf_counter() - started) * 1000)
 
@@ -68,14 +73,20 @@ def search():
         for r in results[: min(len(results), 5)]
     ]
 
-    create_search_log(
-        user_id=user_id,
-        query_text=query,
-        normalized_query=normalized_query,
-        total_results=len(results),
-        top_results=top_results,
-        latency_ms=latency_ms,
-    )
+    # Only record history for authenticated users.
+    # Search must remain available even if MongoDB/history logging is temporarily unavailable.
+    if user_id is not None:
+        try:
+            create_search_log(
+                user_id=user_id,
+                query_text=query,
+                normalized_query=normalized_query,
+                total_results=len(results),
+                top_results=top_results,
+                latency_ms=latency_ms,
+            )
+        except Exception:
+            pass
 
     return success({"query": query, "count": len(results), "results": results, "latency_ms": latency_ms})
 
