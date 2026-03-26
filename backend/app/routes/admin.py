@@ -5,6 +5,7 @@ from backend.app.services.admin_service import (
     index_stats,
     list_books,
     process_book,
+    process_uploaded_books,
     upload_book,
     validate_process_book,
 )
@@ -39,13 +40,21 @@ def _is_full_rebuild_mode() -> bool:
 def upload():
     file_storage = request.files.get("file")
     domain = (request.form.get("domain") or "").strip()
-    title = (request.form.get("title") or "").strip() or None
+    title = (request.form.get("title") or "").strip()
+    author = (request.form.get("author") or "").strip()
+    year = (request.form.get("year") or "").strip()
 
-    book_doc, err = upload_book(file_storage, domain, title)
+    book_doc, err = upload_book(file_storage, domain, title, author, year)
     if err == "missing file":
         return error("file is required", status=400)
     if err == "missing domain":
         return error("domain is required", status=400)
+    if err == "missing title":
+        return error("title is required", status=400)
+    if err == "missing author":
+        return error("author is required", status=400)
+    if err == "invalid year":
+        return error("year must be a number", status=400)
     if err:
         return error(err, status=400)
 
@@ -79,6 +88,29 @@ def process_book_route(book_id: int):
             "job_type": job.get("job_type"),
             "status": job.get("status"),
             "book_id": book_id,
+        },
+        message="job accepted",
+        status=202,
+    )
+
+
+@bp.post("/process-books")
+@require_auth
+@require_admin
+def process_books_route():
+    if _is_wait_mode():
+        result, run_err = process_uploaded_books()
+        if run_err:
+            return error(run_err, status=400)
+        return success(result)
+
+    job = submit_job("process_books", process_uploaded_books, meta={"mode": "uploaded"})
+    return success(
+        {
+            "job_id": job.get("job_id"),
+            "job_type": job.get("job_type"),
+            "status": job.get("status"),
+            "mode": "uploaded",
         },
         message="job accepted",
         status=202,
