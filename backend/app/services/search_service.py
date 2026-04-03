@@ -1,6 +1,7 @@
 import math
 import pickle
 import re
+from bisect import bisect_right
 from pathlib import Path
 
 from backend.app.config.database import get_database
@@ -41,6 +42,10 @@ def _snippet(text: str, query_terms, max_len: int = 220):
 
 
 class SearchService:
+    PHRASE_BOOST = 8.0
+    ORDERED_PROXIMITY_BOOST = 2.5
+    PROXIMITY_WINDOW = 20
+
     def __init__(self):
         self.db = get_database()
         self.pages = self.db["pages"]
@@ -99,6 +104,80 @@ class SearchService:
     def normalize_query(self, query: str):
         return _tokenize((query or "").strip())
 
+    def _exact_phrase_hits(self, query_terms, doc_id, term_positions):
+        if len(query_terms) < 2:
+            return 0
+
+        first_positions = term_positions.get(query_terms[0], {}).get(doc_id, [])
+        if not first_positions:
+            return 0
+
+        lookup_sets = []
+        for term in query_terms[1:]:
+            positions = term_positions.get(term, {}).get(doc_id, [])
+            if not positions:
+                return 0
+            lookup_sets.append(set(positions))
+
+        hits = 0
+        for start in first_positions:
+            if all((start + offset + 1) in lookup_sets[offset] for offset in range(len(lookup_sets))):
+                hits += 1
+
+        return hits
+
+    def _best_ordered_span(self, query_terms, doc_id, term_positions):
+        if len(query_terms) < 2:
+            return None
+
+        lists = []
+        for term in query_terms:
+            positions = term_positions.get(term, {}).get(doc_id, [])
+            if not positions:
+                return None
+            lists.append(positions)
+
+        best_span = None
+        for start in lists[0]:
+            prev = start
+            valid = True
+            for next_positions in lists[1:]:
+                idx = bisect_right(next_positions, prev)
+                if idx >= len(next_positions):
+                    valid = False
+                    break
+                prev = next_positions[idx]
+
+            if not valid:
+                continue
+
+            span = (prev - start) + 1
+            if best_span is None or span < best_span:
+                best_span = span
+
+        return best_span
+
+    def _phrase_proximity_boost(self, query_terms, doc_id, term_positions):
+        if len(query_terms) < 2:
+            return 0.0
+
+        exact_hits = self._exact_phrase_hits(query_terms, doc_id, term_positions)
+        phrase_boost = self.PHRASE_BOOST * min(exact_hits, 3)
+
+        span = self._best_ordered_span(query_terms, doc_id, term_positions)
+        if span is None:
+            return float(phrase_boost)
+
+        query_len = len(query_terms)
+        proximity_factor = min(1.0, query_len / max(query_len, span))
+        proximity_boost = self.ORDERED_PROXIMITY_BOOST * proximity_factor
+
+        if span <= self.PROXIMITY_WINDOW:
+            tightness = 1.0 - ((span - query_len) / max(1, self.PROXIMITY_WINDOW - query_len))
+            proximity_boost += max(0.0, tightness)
+
+        return float(phrase_boost + proximity_boost)
+
     def search(self, query: str, top_k: int = 10):
         query = (query or "").strip()
         if not query:
@@ -110,12 +189,13 @@ class SearchService:
 
         data = self.load_index()
         books_metadata = data["books_metadata"]
+        term_positions = data.get("term_positions", {})
 
         ranked = sorted(self._bm25_scores(query_terms).items(), key=lambda item: item[1], reverse=True)
         if not ranked:
             return []
 
-        candidates = ranked[: max(top_k * 3, top_k)]
+        candidates = ranked[: max(top_k * 5, top_k)]
         page_filter = [
             {"book_id": book_id, "page_number": page_number}
             for (book_id, page_number), _ in candidates
@@ -131,16 +211,22 @@ class SearchService:
                 key = (page.get("book_id"), page.get("page_number"))
                 page_map[key] = page
 
-        results = []
-
-        for (book_id, page_number), score in ranked:
-            page = page_map.get((book_id, page_number))
+        reranked = []
+        for (book_id, page_number), bm25_score in candidates:
+            doc_id = (book_id, page_number)
+            page = page_map.get(doc_id)
             if not page:
                 continue
 
+            boost = self._phrase_proximity_boost(query_terms, doc_id, term_positions)
+            reranked.append((float(bm25_score) + boost, float(bm25_score), doc_id, page))
+
+        reranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+
+        results = []
+        for score, _bm25_score, (book_id, page_number), page in reranked:
             text_content = page.get("text_content", "")
             book_info = books_metadata.get(book_id, {})
-
             results.append(
                 {
                     "book_id": book_id,

@@ -17,6 +17,7 @@ Given a line, sentence, or paragraph of text, the system identifies:
 ## Core Techniques
 - Inverted index
 - BM25 ranking
+- Positional indexing for phrase/proximity scoring
 - OCR (Tesseract) for scanned PDFs when needed
 
 ## Key Principle
@@ -71,13 +72,14 @@ The ingestion pipeline is intentionally separated:
 
 3. Build Index
 - API: `POST /api/admin/index/build`
-- Builds/updates the inverted index from processed books
+- Builds/updates the positional inverted index from processed books
 - Writes `backend/data/search_index.pkl`
 - Marks processed books as `indexed`
 
 ## Search Workflow
 - API: `POST /api/search`
 - Uses the prebuilt index for candidate retrieval and BM25 ranking
+- Applies phrase/proximity reranking so exact-order and near-order matches are prioritized
 - Returns `book_id`, `title`, `page_id`, `page_number`, `score`, `snippet`
 
 ## Page Preview Workflow

@@ -4,6 +4,7 @@ A full-stack academic project for classical information retrieval. Given a line,
 
 ## Features
 - BM25 search over a persisted inverted index
+- Phrase/proximity-aware reranking (exact order and near-order matches score higher)
 - PDF ingestion with text extraction (OCR fallback when needed)
 - Page-level preview using the original PDF page
 - Auth + admin workflow (upload, process, index)
@@ -12,7 +13,7 @@ A full-stack academic project for classical information retrieval. Given a line,
 ## Tech Stack
 - Backend: Python + Flask
 - Database: MongoDB
-- Search/Index: Inverted index + BM25 (pickle)
+- Search/Index: Positional inverted index + BM25 + phrase/proximity reranking (pickle)
 - PDF/Text extraction: PyMuPDF + optional OCR (Tesseract + pdf2image)
 - Frontend: React + TypeScript (Vite)
 
@@ -95,7 +96,7 @@ Frontend env vars (optional):
 ## Admin Workflow (Typical)
 1. Upload books (PDF)
 2. Process uploaded books (extract pages)
-3. Build index (indexes processed books)
+3. Build index (indexes processed books with term positions)
 
 ## Maintenance Scripts
 These scripts are for local setup/maintenance and are not called by the API.

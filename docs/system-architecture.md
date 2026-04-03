@@ -10,8 +10,8 @@
 ## High-Level Flow
 1. Admin uploads a book (filesystem + DB metadata)
 2. Admin processes the book (extract text into `pages`)
-3. Admin builds the index (writes `.pkl` file)
-4. User searches (BM25 over the prebuilt index)
+3. Admin builds the index with term positions (writes `.pkl` file)
+4. User searches (BM25 candidate retrieval + phrase/proximity reranking)
 5. User opens the matched page preview (PDF page)
 
 ## Directory Structure
@@ -39,8 +39,9 @@ Runtime folders (ignored by git):
 
 ## Indexing Design
 - Search runs only on the prebuilt index (fast runtime)
-- Index builds from processed books/pages
+- Index builds from processed books/pages and stores token positions
 - Default behavior is incremental (avoid full rebuild when possible)
+- Ranking uses BM25 as baseline, then applies order/proximity boosts
 
 ## PDF Preview Design
 - Extracted text is used for ranking/snippets only
