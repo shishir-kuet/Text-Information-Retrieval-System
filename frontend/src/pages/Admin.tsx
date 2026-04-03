@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
-import { BookOpen, Database, Upload } from "lucide-react"
+import { BookOpen, Upload } from "lucide-react"
 import { api } from "../lib/api"
 import { useAuth } from "../lib/auth"
-import type { AdminIndexStats, BooksResponse, JobsResponse, SearchLogsResponse } from "../lib/types"
+import type { BooksResponse, DomainListResponse } from "../lib/types"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Select } from "../components/ui/select"
@@ -10,9 +10,7 @@ import { Select } from "../components/ui/select"
 export default function Admin() {
   const { token, user } = useAuth()
   const [books, setBooks] = useState<BooksResponse | null>(null)
-  const [stats, setStats] = useState<AdminIndexStats | null>(null)
-  const [logs, setLogs] = useState<SearchLogsResponse | null>(null)
-  const [jobs, setJobs] = useState<JobsResponse | null>(null)
+  const [domains, setDomains] = useState<DomainListResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [processStatus, setProcessStatus] = useState<string | null>(null)
@@ -35,16 +33,12 @@ export default function Admin() {
   const loadAll = async () => {
     if (!token) return
     try {
-      const [bookData, statData, logData, jobData] = await Promise.all([
+      const [bookData, domainData] = await Promise.all([
         api.adminBooks(token),
-        api.adminIndexStats(token),
-        api.adminSearchLogs(token),
-        api.adminJobs(token),
+        api.adminDomains(token),
       ])
       setBooks(bookData)
-      setStats(statData)
-      setLogs(logData)
-      setJobs(jobData)
+      setDomains(domainData)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -56,8 +50,6 @@ export default function Admin() {
 
   const bookItems = books?.items ?? []
   const totalBooks = books?.count ?? bookItems.length
-  const logItems = logs?.items ?? []
-  const jobItems = jobs?.items ?? []
 
   const totalBookPages = Math.max(1, Math.ceil(bookItems.length / booksPerPage))
   const safeBooksPage = Math.min(Math.max(1, booksPage), totalBookPages)
@@ -70,12 +62,9 @@ export default function Admin() {
   }, [booksPage, safeBooksPage])
 
   const domainOptions = useMemo(() => {
-    const unique = new Set<string>()
-    for (const book of bookItems) {
-      if (book.domain) unique.add(book.domain)
-    }
-    return Array.from(unique).sort().map((domain) => ({ label: domain, value: domain }))
-  }, [bookItems])
+    const items = domains?.items ?? []
+    return items.map((domain) => ({ label: domain, value: domain }))
+  }, [domains])
 
   const domainSelectOptions = useMemo(() => {
     return [{ label: "Select domain", value: "" }, ...domainOptions]
@@ -220,7 +209,7 @@ export default function Admin() {
                 className="h-12"
               />
               {domainOptions.length === 0 && (
-                <div className="text-xs text-white/60">No domains found yet. Add a book in an existing domain first.</div>
+                <div className="text-xs text-white/60">No domains found in the books folder yet.</div>
               )}
               <Input
                 type="text"

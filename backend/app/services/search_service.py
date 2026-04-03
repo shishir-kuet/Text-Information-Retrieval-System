@@ -66,29 +66,6 @@ class SearchService:
     def index_available(self):
         return Path(self.index_file).exists()
 
-    def stats(self):
-        idx_exists = self.index_available()
-        idx_size = Path(self.index_file).stat().st_size if idx_exists else 0
-        build_date = None
-
-        if idx_exists:
-            try:
-                index_data = self.load_index()
-                build_date = index_data.get("build_date")
-            except Exception:
-                build_date = None
-
-        return {
-            "total_books": self.books.count_documents({}),
-            "total_pages": self.pages.count_documents({}),
-            "index": {
-                "available": idx_exists,
-                "path": str(self.index_file),
-                "size_bytes": idx_size,
-                "build_date": build_date,
-            },
-        }
-
     def _bm25_scores(self, query_terms):
         data = self.load_index()
         inverted_index = data["inverted_index"]
@@ -209,26 +186,6 @@ class SearchService:
                 "year": book.get("year"),
                 "num_pages": num_pages,
             },
-        }
-
-    def get_page_pdf_preview(self, page_id: str):
-        raw_page = self.pages.find_one({"page_id": page_id})
-        if not raw_page:
-            return None
-
-        page = ensure_page_document(raw_page)
-        book = self.books.find_one({"book_id": page.get("book_id")})
-        if not book:
-            return None
-
-        abs_path, pdf_url = resolve_pdf_path(book.get("file_path"))
-        if abs_path is None or not abs_path.exists():
-            raise FileNotFoundError("PDF file not found")
-
-        return {
-            "book_id": page.get("book_id"),
-            "page_number": page.get("page_number"),
-            "pdf_url": pdf_url,
         }
 
     def get_book_download(self, book_id: int):

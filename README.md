@@ -21,9 +21,29 @@ A full-stack academic project for classical information retrieval. Given a line,
 - `frontend/` React UI
 - `docs/` System docs (architecture, schema, requirements)
 
-## Local Setup
+## Docker Quickstart (Recommended)
 
-### 1) Backend
+Prereqs:
+- Docker Desktop (Compose enabled)
+
+Start everything:
+```bash
+docker compose up --build -d
+```
+
+Endpoints:
+- Frontend: `http://127.0.0.1:5173`
+- Backend API: `http://127.0.0.1:5000`
+- Health check: `GET http://127.0.0.1:5000/api/health`
+
+Stop:
+```bash
+docker compose down
+```
+
+## Local Setup (Optional)
+
+### Backend
 Prereqs:
 - Python 3.10+
 - MongoDB running locally
@@ -42,9 +62,7 @@ cd backend
 python run.py
 ```
 
-Health check: `GET http://127.0.0.1:5000/api/health`
-
-### 2) Frontend
+### Frontend
 Prereqs:
 - Node.js 18+ recommended
 
@@ -54,8 +72,6 @@ cd frontend
 npm install
 npm run dev
 ```
-
-Open: `http://127.0.0.1:5173`
 
 ## Environment Variables
 Create a `.env` file at the project root or in `backend/.env` (do not commit it). Use `backend/.env.example` as a starting point.
@@ -89,10 +105,8 @@ These scripts are for local setup/maintenance and are not called by the API.
 ## API Overview (Selected)
 Public:
 - `GET /api/health`
-- `GET /api/stats`
 - `POST /api/search`
 - `GET /api/page/<page_id>`
-- `GET /api/page/<page_id>/pdf-preview`
 - `GET /api/page/<page_id>/pdf` (single-page PDF)
 
 Auth:
@@ -109,13 +123,11 @@ User:
 
 Admin:
 - `POST /api/admin/upload`
-- `POST /api/admin/process-book/<book_id>`
 - `POST /api/admin/index/build`
 - `GET /api/admin/index/stats`
 - `GET /api/admin/books`
 - `GET /api/admin/logs/search`
 - `GET /api/admin/jobs`
-- `GET /api/admin/jobs/<job_id>`
 
 ## Git Hygiene
 This repo ignores runtime/generated files like:

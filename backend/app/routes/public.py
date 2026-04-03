@@ -23,12 +23,6 @@ def health():
     return success(payload)
 
 
-@bp.get("/stats")
-def stats():
-    data = search_service.stats()
-    return success(data)
-
-
 @bp.post("/search")
 def search():
     started = time.perf_counter()
@@ -97,19 +91,6 @@ def get_page(page_id):
     if not page_data:
         return error("page not found", status=404)
     return success(page_data)
-
-
-@bp.get("/page/<page_id>/pdf-preview")
-def get_page_pdf_preview(page_id):
-    try:
-        preview = search_service.get_page_pdf_preview(page_id)
-    except FileNotFoundError:
-        return error("pdf file not found", status=404)
-
-    if not preview:
-        return error("page or book not found", status=404)
-
-    return success(preview)
 
 
 @bp.get("/page/<page_id>/pdf")
