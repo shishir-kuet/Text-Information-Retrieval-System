@@ -235,6 +235,13 @@ def list_books(limit: int = 100):
     return list(cursor)
 
 
+def list_domains():
+    if not BOOKS_DIR.exists():
+        return []
+    domains = [path.name for path in BOOKS_DIR.iterdir() if path.is_dir()]
+    return sorted(domains)
+
+
 def index_stats():
     idx_path = Path(SEARCH_INDEX_FILE)
     exists = idx_path.exists()

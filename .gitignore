@@ -1,6 +1,8 @@
 ﻿# Python
 __pycache__/
 *.pyc
+*.pyo
+.Python
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
@@ -11,6 +13,9 @@ htmlcov/
 .hypothesis/
 .venv/
 venv/
+build/
+dist/
+*.egg-info/
 
 # Environment
 .env
@@ -22,17 +27,28 @@ backend/books/
 backend/data/search_index.pkl
 backend/data/exports/
 backend/data/*.pkl
+backend/data/*.sqlite
+backend/data/*.sqlite3
+backend/data/*.db
 
 # Frontend runtime/build artifacts
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
+frontend/.eslintcache
 
 # IDE / OS
-.vscode/cd 
+.vscode/
 .idea/
+.vs/
+*.iml
 .DS_Store
 Thumbs.db
+*.lnk
+
+# Optional editor workspace files
+*.code-workspace
 
 # Logs and temp
 *.log
@@ -53,6 +69,28 @@ pnpm-debug.log*
 books/
 dataset/
 
+# Local helper scripts/tools
+tools/
+
+# Local databases (anywhere)
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Local smoke-test artifacts
 backend/tmp_*.json
 backend/tmp*.pdf
+
+# VS Code isolated profile
+.vscode-lite/
+
+
+# VS Code local backups
+.vscode-fix-backup/
+
+# Windows accidental device file
+NUL
+

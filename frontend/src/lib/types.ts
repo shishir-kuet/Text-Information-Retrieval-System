@@ -38,11 +38,6 @@ export type PageInfo = {
   }
 }
 
-export type PdfPreview = {
-  book_id: number
-  page_number: number
-  pdf_url: string
-}
 
 export type AuthUser = {
   user_id: number
@@ -90,15 +85,9 @@ export type BooksResponse = {
   items: BookItem[]
 }
 
-export type IndexStats = {
-  total_books: number
-  total_pages: number
-  index: {
-    available: boolean
-    path: string
-    size_bytes: number
-    build_date: string | null
-  }
+export type DomainListResponse = {
+  count: number
+  items: string[]
 }
 
 export type AdminIndexStats = {

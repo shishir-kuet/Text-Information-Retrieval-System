@@ -1,7 +1,7 @@
 ﻿# System Architecture
 
 ## Components
-- Frontend: React (planned, not committed yet)
+- Frontend: React + TypeScript (Vite)
 - Backend: Flask API
 - Database: MongoDB (`book_search_system`)
 - Search index: `backend/data/search_index.pkl` (pickle)
@@ -47,7 +47,6 @@ Runtime folders (ignored by git):
 - Preview uses PDF content for the final user-facing view
 
 Endpoints:
-- `GET /api/page/<page_id>/pdf-preview` returns preview info
 - `GET /api/page/<page_id>/pdf` returns a single-page PDF for safe viewing
 - `GET /api/book/<book_id>/download` returns the full PDF (login required)
 

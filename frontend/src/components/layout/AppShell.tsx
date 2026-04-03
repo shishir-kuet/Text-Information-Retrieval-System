@@ -39,7 +39,11 @@ export function AppShell() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `text-sm font-semibold transition ${isActive ? "text-white" : "text-white/60 hover:text-white"}`
+                  `rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                    isActive
+                      ? "border-white/35 bg-white/10 text-white"
+                      : "border-transparent text-white/60 hover:border-white/50 hover:bg-white/5 hover:text-white"
+                  }`
                 }
               >
                 {item.label}

@@ -64,9 +64,9 @@ The ingestion pipeline is intentionally separated:
 - Sets `status=uploaded`
 
 2. Process
-- API: `POST /api/admin/process-book/<book_id>`
+- API: `POST /api/admin/process-books`
 - Extracts text (OCR or direct extraction)
-- Inserts/updates `pages` for that book
+- Inserts/updates `pages` for uploaded books
 - Sets `status=processed`
 
 3. Build Index
@@ -83,7 +83,6 @@ The ingestion pipeline is intentionally separated:
 ## Page Preview Workflow
 APIs:
 - `GET /api/page/<page_id>` returns stored page metadata and extracted text
-- `GET /api/page/<page_id>/pdf-preview` returns info needed to preview a page
 - `GET /api/page/<page_id>/pdf` returns a single-page PDF for that page_id
 
 Note: The single-page PDF endpoint is used to avoid exposing the full book PDF to guests via the browser PDF viewer.

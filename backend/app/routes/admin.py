@@ -3,13 +3,12 @@ from flask import Blueprint, request
 from backend.app.services.admin_service import (
     build_index_and_update,
     index_stats,
+    list_domains,
     list_books,
-    process_book,
     process_uploaded_books,
     upload_book,
-    validate_process_book,
 )
-from backend.app.services.job_service import get_job, list_jobs, submit_job
+from backend.app.services.job_service import list_jobs, submit_job
 from backend.app.services.search_log_service import get_admin_search_logs
 from backend.app.utils.api_response import error, success
 from backend.app.utils.auth import require_admin, require_auth
@@ -61,37 +60,12 @@ def upload():
     return success(_serialize(book_doc), status=201)
 
 
-@bp.post("/process-book/<int:book_id>")
+@bp.get("/domains")
 @require_auth
 @require_admin
-def process_book_route(book_id: int):
-    _, err = validate_process_book(book_id)
-    if err == "book not found":
-        return error("book not found", status=404)
-    if err == "missing file_path":
-        return error("book file_path missing", status=404)
-    if err == "file not found":
-        return error("book file not found", status=404)
-    if err:
-        return error(err, status=400)
-
-    if _is_wait_mode():
-        result, run_err = process_book(book_id)
-        if run_err:
-            return error(run_err, status=400)
-        return success(result)
-
-    job = submit_job("process_book", process_book, book_id, meta={"book_id": book_id})
-    return success(
-        {
-            "job_id": job.get("job_id"),
-            "job_type": job.get("job_type"),
-            "status": job.get("status"),
-            "book_id": book_id,
-        },
-        message="job accepted",
-        status=202,
-    )
+def domains():
+    items = list_domains()
+    return success({"count": len(items), "items": items})
 
 
 @bp.post("/process-books")
@@ -160,16 +134,6 @@ def list_jobs_route():
 
     items = list_jobs(limit=limit, status=status)
     return success({"count": len(items), "items": items, "limit": limit, "status": status})
-
-
-@bp.get("/jobs/<job_id>")
-@require_auth
-@require_admin
-def get_job_route(job_id: str):
-    job = get_job(job_id)
-    if not job:
-        return error("job not found", status=404)
-    return success(job)
 
 
 @bp.get("/books")

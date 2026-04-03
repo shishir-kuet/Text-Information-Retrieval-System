@@ -50,15 +50,8 @@ def submit_job(job_type: str, target, *args, meta: dict | None = None, **kwargs)
             _set_job(job_id, status="failed", finished_at=_now_iso(), error=str(exc))
 
     _executor.submit(_runner)
-    return get_job(job_id)
-
-
-def get_job(job_id: str):
     with _jobs_lock:
-        job = _jobs.get(job_id)
-        if not job:
-            return None
-        return deepcopy(job)
+        return deepcopy(_jobs.get(job_id))
 
 
 def list_jobs(limit: int = 50, status: str | None = None):
