@@ -43,7 +43,7 @@ export default function PageDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
+      <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="text-sm text-white/60">{page.book.title}</div>
@@ -68,7 +68,7 @@ export default function PageDetail() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+        <div className="card-hover mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
           <div className="text-sm text-white/90">About This Book</div>
           <div className="mt-4 space-y-2 text-sm text-white/60">
             <div>

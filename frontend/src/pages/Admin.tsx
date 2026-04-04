@@ -180,7 +180,7 @@ export default function Admin() {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
+      <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
         <div className="flex items-center gap-3">
           <Upload className="h-5 w-5" />
           <h1 className="text-2xl font-semibold">Admin Console</h1>
@@ -192,7 +192,7 @@ export default function Admin() {
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
-          <form onSubmit={handleUpload} className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
+          <form onSubmit={handleUpload} className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
             <h2 className="text-lg font-semibold">Upload a book</h2>
             <div className="mt-4 space-y-3">
               <Input
@@ -241,7 +241,7 @@ export default function Admin() {
             </div>
           </form>
 
-          <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
+          <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
             <h2 className="text-lg font-semibold">Process & Index</h2>
             <div className="mt-4 space-y-3">
               <div className="text-sm text-white/70">
@@ -276,7 +276,7 @@ export default function Admin() {
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
+          <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
             <div className="flex items-center gap-2 text-lg font-semibold">
               <BookOpen className="h-4 w-4" />
               Books
@@ -284,7 +284,7 @@ export default function Admin() {
             <div className="mt-1 text-xs text-white/60">Total books: {totalBooks}</div>
             <div className="mt-4 space-y-3 text-sm text-white/70">
               {pagedBooks.map((book) => (
-                <div key={book.book_id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div key={book.book_id} className="card-hover rounded-xl border border-white/10 bg-black/20 p-3">
                   <div className="font-semibold text-white">{book.title}</div>
                   <div className="text-xs text-white/60">{book.domain} · {book.status}</div>
                 </div>

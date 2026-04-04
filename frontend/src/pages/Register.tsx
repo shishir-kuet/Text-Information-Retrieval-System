@@ -29,7 +29,7 @@ export default function Register() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
-      <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-8">
+      <div className="card-hover mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-8">
         <h1 className="text-2xl font-semibold text-white">Create your account</h1>
         <p className="mt-2 text-sm text-white/60">Get access to downloads and saved search history.</p>
 

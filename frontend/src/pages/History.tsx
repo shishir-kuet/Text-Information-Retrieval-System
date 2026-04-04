@@ -76,11 +76,11 @@ export default function History() {
         <Button variant="outline" onClick={clearAll}>Clear all</Button>
       </div>
 
-      {error && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
+      {error && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200 transition-colors duration-150 ease-out hover:border-red-500/50 hover:bg-red-500/15">{error}</div>}
 
       <div className="grid gap-4">
         {data?.items.map((item) => (
-          <div key={item.log_id} className="rounded-2xl border border-white/10 bg-[var(--color-surface)]/70 p-5">
+          <div key={item.log_id} className="card-hover rounded-2xl border border-white/10 bg-[var(--color-surface)]/70 p-5 transition-colors duration-150 ease-out hover:border-white/20 hover:bg-[var(--color-surface)]/80">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-white/60">{item.created_at}</div>
