@@ -4,6 +4,7 @@ A full-stack academic project for classical information retrieval. Given a line,
 
 ## Features
 - BM25 search over a persisted inverted index
+- Phrase/proximity-aware reranking (exact order and near-order matches score higher)
 - PDF ingestion with text extraction (OCR fallback when needed)
 - Page-level preview using the original PDF page
 - Auth + admin workflow (upload, process, index)
@@ -12,7 +13,7 @@ A full-stack academic project for classical information retrieval. Given a line,
 ## Tech Stack
 - Backend: Python + Flask
 - Database: MongoDB
-- Search/Index: Inverted index + BM25 (pickle)
+- Search/Index: Positional inverted index + BM25 + phrase/proximity reranking (pickle)
 - PDF/Text extraction: PyMuPDF + optional OCR (Tesseract + pdf2image)
 - Frontend: React + TypeScript (Vite)
 
@@ -21,9 +22,29 @@ A full-stack academic project for classical information retrieval. Given a line,
 - `frontend/` React UI
 - `docs/` System docs (architecture, schema, requirements)
 
-## Local Setup
+## Docker Quickstart (Recommended)
 
-### 1) Backend
+Prereqs:
+- Docker Desktop (Compose enabled)
+
+Start everything:
+```bash
+docker compose up --build -d
+```
+
+Endpoints:
+- Frontend: `http://127.0.0.1:5173`
+- Backend API: `http://127.0.0.1:5000`
+- Health check: `GET http://127.0.0.1:5000/api/health`
+
+Stop:
+```bash
+docker compose down
+```
+
+## Local Setup (Optional)
+
+### Backend
 Prereqs:
 - Python 3.10+
 - MongoDB running locally
@@ -42,9 +63,7 @@ cd backend
 python run.py
 ```
 
-Health check: `GET http://127.0.0.1:5000/api/health`
-
-### 2) Frontend
+### Frontend
 Prereqs:
 - Node.js 18+ recommended
 
@@ -54,8 +73,6 @@ cd frontend
 npm install
 npm run dev
 ```
-
-Open: `http://127.0.0.1:5173`
 
 ## Environment Variables
 Create a `.env` file at the project root or in `backend/.env` (do not commit it). Use `backend/.env.example` as a starting point.
@@ -79,7 +96,7 @@ Frontend env vars (optional):
 ## Admin Workflow (Typical)
 1. Upload books (PDF)
 2. Process uploaded books (extract pages)
-3. Build index (indexes processed books)
+3. Build index (indexes processed books with term positions)
 
 ## Maintenance Scripts
 These scripts are for local setup/maintenance and are not called by the API.
@@ -89,10 +106,8 @@ These scripts are for local setup/maintenance and are not called by the API.
 ## API Overview (Selected)
 Public:
 - `GET /api/health`
-- `GET /api/stats`
 - `POST /api/search`
 - `GET /api/page/<page_id>`
-- `GET /api/page/<page_id>/pdf-preview`
 - `GET /api/page/<page_id>/pdf` (single-page PDF)
 
 Auth:
@@ -109,13 +124,11 @@ User:
 
 Admin:
 - `POST /api/admin/upload`
-- `POST /api/admin/process-book/<book_id>`
 - `POST /api/admin/index/build`
 - `GET /api/admin/index/stats`
 - `GET /api/admin/books`
 - `GET /api/admin/logs/search`
 - `GET /api/admin/jobs`
-- `GET /api/admin/jobs/<job_id>`
 
 ## Git Hygiene
 This repo ignores runtime/generated files like:

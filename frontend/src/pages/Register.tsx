@@ -28,33 +28,35 @@ export default function Register() {
   }
 
   return (
-    <div className="mx-auto max-w-md rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-8">
-      <h1 className="text-2xl font-semibold text-white">Create your account</h1>
-      <p className="mt-2 text-sm text-white/60">Get access to downloads and saved search history.</p>
+    <div className="flex min-h-screen items-center justify-center px-6 py-12">
+      <div className="card-hover mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-8">
+        <h1 className="text-2xl font-semibold text-white">Create your account</h1>
+        <p className="mt-2 text-sm text-white/60">Get access to downloads and saved search history.</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <Input
-          placeholder="Full name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <Input
-          type="email"
-          placeholder="Email address"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <Input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {error && <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">{error}</div>}
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Creating account..." : "Register"}
-        </Button>
-      </form>
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <Input
+            placeholder="Full name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <Input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          {error && <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">{error}</div>}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Creating account..." : "Register"}
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }

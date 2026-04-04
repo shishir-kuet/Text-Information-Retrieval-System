@@ -4,11 +4,10 @@ import type {
   AuthResponse,
   AuthUser,
   BooksResponse,
+  DomainListResponse,
   HistoryResponse,
-  IndexStats,
   JobsResponse,
   PageInfo,
-  PdfPreview,
   SearchLogsResponse,
   SearchResponse,
 } from "./types"
@@ -68,15 +67,12 @@ async function requestForm<T>(
 export const api = {
   baseUrl: API_BASE,
   health: () => requestJson<{ status: string; timestamp: string }>("/api/health"),
-  stats: () => requestJson<IndexStats>("/api/stats"),
   search: (query: string, topK: number, token?: string) =>
     requestJson<SearchResponse>("/api/search", {
       method: "POST",
       body: JSON.stringify({ query, top_k: topK }),
     }, token),
   page: (pageId: string) => requestJson<PageInfo>(`/api/page/${pageId}`),
-  pagePreview: (pageId: string) =>
-    requestJson<PdfPreview>(`/api/page/${pageId}/pdf-preview`),
   login: (email: string, password: string) =>
     requestJson<AuthResponse>("/api/auth/login", {
       method: "POST",
@@ -97,8 +93,6 @@ export const api = {
   clearHistory: (token: string) =>
     requestJson<{ deleted: number }>("/api/history", { method: "DELETE" }, token),
   adminUpload: (token: string, data: FormData) => requestForm<Record<string, unknown>>("/api/admin/upload", data, token),
-  adminProcessBook: (token: string, bookId: number, wait = false) =>
-    requestJson<Record<string, unknown>>(`/api/admin/process-book/${bookId}?wait=${wait ? 1 : 0}`, { method: "POST" }, token),
   adminProcessUploaded: (token: string, wait = false) =>
     requestJson<Record<string, unknown>>(`/api/admin/process-books?wait=${wait ? 1 : 0}`, { method: "POST" }, token),
   adminBuildIndex: (token: string, full = false, wait = false) =>
@@ -106,11 +100,11 @@ export const api = {
   adminIndexStats: (token: string) => requestJson<AdminIndexStats>("/api/admin/index/stats", {}, token),
   adminBooks: (token: string, limit = 200) =>
     requestJson<BooksResponse>(`/api/admin/books?limit=${limit}`, {}, token),
+  adminDomains: (token: string) => requestJson<DomainListResponse>("/api/admin/domains", {}, token),
   adminSearchLogs: (token: string, limit = 100, skip = 0) =>
     requestJson<SearchLogsResponse>(`/api/admin/logs/search?limit=${limit}&skip=${skip}`, {}, token),
   adminJobs: (token: string, limit = 50, status?: string) => {
     const query = status ? `?limit=${limit}&status=${status}` : `?limit=${limit}`
     return requestJson<JobsResponse>(`/api/admin/jobs${query}`, {}, token)
   },
-  adminJob: (token: string, jobId: string) => requestJson<Record<string, unknown>>(`/api/admin/jobs/${jobId}`, {}, token),
 }

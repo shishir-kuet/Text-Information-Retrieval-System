@@ -43,7 +43,7 @@ export default function PageDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
+      <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="text-sm text-white/60">{page.book.title}</div>
@@ -68,14 +68,24 @@ export default function PageDetail() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
-        <div className="text-sm text-white/90">About This Book</div>
+        <div className="card-hover mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+          <div className="text-sm text-white/90">About This Book</div>
           <div className="mt-4 space-y-2 text-sm text-white/60">
-            <div>Book Title: {page.book.title || "-"}</div>
-            <div>Author: {page.book.author || "-"}</div>
-            <div>Publication Year: {page.book.year ?? "-"}</div>
-            <div>Domain: {page.book.domain || "-"}</div>
-            <div>Total Pages: {page.book.num_pages ?? "-"}</div>
+            <div>
+              Book Title: <span className="font-semibold">{page.book.title || "-"}</span>
+            </div>
+            <div>
+              Author: <span className="font-semibold">{page.book.author || "-"}</span>
+            </div>
+            <div>
+              Publication Year: <span className="font-semibold">{page.book.year ?? "-"}</span>
+            </div>
+            <div>
+              Domain: <span className="font-semibold">{page.book.domain || "-"}</span>
+            </div>
+            <div>
+              Total Pages: <span className="font-semibold">{page.book.num_pages ?? "-"}</span>
+            </div>
           </div>
         </div>
       </div>

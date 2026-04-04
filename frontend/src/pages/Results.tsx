@@ -63,7 +63,7 @@ export default function Results() {
         </p>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6 md:p-8">
+      <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6 md:p-8">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/60" />
@@ -111,7 +111,7 @@ export default function Results() {
       )}
 
       {!loading && !error && !data && (
-        <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/50 p-8">
+        <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/50 p-8">
           <div className="flex flex-col items-start gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5">
               <Search className="h-5 w-5 text-white/70" />
@@ -139,7 +139,7 @@ export default function Results() {
           </div>
 
           {data.results.length === 0 ? (
-            <div className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/50 p-8">
+            <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/50 p-8">
               <div className="text-lg font-semibold">No matches found</div>
               <div className="mt-2 text-sm text-white/70">
                 Try a different excerpt or include a few more unique keywords.
@@ -147,17 +147,17 @@ export default function Results() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {data.results.map((result) => (
+              {data.results.map((result, index) => (
                 <div
                   key={result.page_id}
-                  className="rounded-2xl border border-white/10 bg-[var(--color-surface)]/70 p-5"
+                  className="card-hover rounded-2xl border border-white/10 bg-[var(--color-surface)]/70 p-5"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="text-sm text-white/60">{result.title}</div>
                       <div className="mt-1 text-lg font-semibold">Page {result.page_number}</div>
                     </div>
-                    <Badge>Top match</Badge>
+                    {index === 0 && <Badge>Best Match</Badge>}
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-3">

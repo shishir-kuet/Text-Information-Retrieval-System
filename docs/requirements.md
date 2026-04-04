@@ -17,6 +17,7 @@ Given a line, sentence, or paragraph of text, the system identifies:
 ## Core Techniques
 - Inverted index
 - BM25 ranking
+- Positional indexing for phrase/proximity scoring
 - OCR (Tesseract) for scanned PDFs when needed
 
 ## Key Principle
@@ -64,26 +65,26 @@ The ingestion pipeline is intentionally separated:
 - Sets `status=uploaded`
 
 2. Process
-- API: `POST /api/admin/process-book/<book_id>`
+- API: `POST /api/admin/process-books`
 - Extracts text (OCR or direct extraction)
-- Inserts/updates `pages` for that book
+- Inserts/updates `pages` for uploaded books
 - Sets `status=processed`
 
 3. Build Index
 - API: `POST /api/admin/index/build`
-- Builds/updates the inverted index from processed books
+- Builds/updates the positional inverted index from processed books
 - Writes `backend/data/search_index.pkl`
 - Marks processed books as `indexed`
 
 ## Search Workflow
 - API: `POST /api/search`
 - Uses the prebuilt index for candidate retrieval and BM25 ranking
+- Applies phrase/proximity reranking so exact-order and near-order matches are prioritized
 - Returns `book_id`, `title`, `page_id`, `page_number`, `score`, `snippet`
 
 ## Page Preview Workflow
 APIs:
 - `GET /api/page/<page_id>` returns stored page metadata and extracted text
-- `GET /api/page/<page_id>/pdf-preview` returns info needed to preview a page
 - `GET /api/page/<page_id>/pdf` returns a single-page PDF for that page_id
 
 Note: The single-page PDF endpoint is used to avoid exposing the full book PDF to guests via the browser PDF viewer.

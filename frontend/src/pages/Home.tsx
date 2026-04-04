@@ -39,7 +39,7 @@ export default function Home() {
             save your recent searches when you sign in.
           </p>
           <div className="flex flex-wrap gap-4">
-            <Button onClick={() => navigate("/results")}>Start searching</Button>
+            <Button onClick={() => navigate("/results")}>Start Searching</Button>
             <Button variant="outline" onClick={() => navigate("/admin")}>Admin Tools</Button>
           </div>
         </div>
@@ -49,7 +49,7 @@ export default function Home() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.1 }}
-        className="rounded-3xl border border-[var(--color-accent)]/30 bg-[var(--color-surface)]/80 p-8 shadow-2xl"
+        className="card-hover rounded-3xl border border-[var(--color-accent)]/30 bg-[var(--color-surface)]/80 p-8 shadow-2xl transition-colors duration-150 ease-out hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface)]/90"
       >
         <form onSubmit={handleSearch} className="space-y-6">
           <div className="relative">
@@ -118,7 +118,7 @@ export default function Home() {
           ].map((feature) => (
             <div
               key={feature.title}
-              className="rounded-2xl border border-white/10 bg-[var(--color-surface)]/70 p-6 shadow-lg"
+              className="card-hover rounded-2xl border border-white/10 bg-[var(--color-surface)]/70 p-6 shadow-lg transition-colors duration-150 ease-out hover:border-white/20 hover:bg-[var(--color-surface)]/80"
             >
               <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-xl ${feature.color}`}>
                 <feature.icon className="h-6 w-6 text-white" />
@@ -130,7 +130,7 @@ export default function Home() {
         </div>
       </motion.section>
 
-      <section className="rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-8">
+      <section className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-8 transition-colors duration-150 ease-out hover:border-white/20 hover:bg-[var(--color-surface)]/80">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-2xl font-semibold text-white">Ready to dive in?</h3>

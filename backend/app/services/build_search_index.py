@@ -43,6 +43,7 @@ def _blank_index_data():
         "books_metadata": {},
         "inverted_index": {},
         "term_freqs": {},
+        "term_positions": {},
         "doc_lengths": {},
         "N": 0,
         "build_date": _now_str(),
@@ -59,6 +60,7 @@ def _load_index_data():
     data.setdefault("books_metadata", {})
     data.setdefault("inverted_index", {})
     data.setdefault("term_freqs", {})
+    data.setdefault("term_positions", {})
     data.setdefault("doc_lengths", {})
     data.setdefault("N", len(data.get("doc_lengths", {})))
     data.setdefault("build_date", _now_str())
@@ -79,6 +81,7 @@ def _remove_books_from_index(index_data, book_ids):
 
     book_id_set = set(book_ids)
     term_freqs = index_data["term_freqs"]
+    term_positions = index_data["term_positions"]
     doc_lengths = index_data["doc_lengths"]
     inverted_index = index_data["inverted_index"]
 
@@ -100,6 +103,12 @@ def _remove_books_from_index(index_data, book_ids):
             else:
                 inverted_index.pop(term, None)
 
+            per_term_positions = term_positions.get(term)
+            if per_term_positions and doc_id in per_term_positions:
+                per_term_positions.pop(doc_id, None)
+                if not per_term_positions:
+                    term_positions.pop(term, None)
+
     for bid in book_id_set:
         index_data["books_metadata"].pop(bid, None)
 
@@ -111,6 +120,7 @@ def _index_pages_for_books(index_data, book_ids):
         return {"indexed_pages": 0, "empty_pages": 0}
 
     term_freqs = index_data["term_freqs"]
+    term_positions = index_data["term_positions"]
     doc_lengths = index_data["doc_lengths"]
     inverted_index = index_data["inverted_index"]
 
@@ -138,12 +148,16 @@ def _index_pages_for_books(index_data, book_ids):
 
         tokens = tokenize(text)
         freq = Counter(tokens)
+        positions = defaultdict(list)
+        for pos, term in enumerate(tokens):
+            positions[term].append(pos)
 
         term_freqs[doc_id] = freq
         doc_lengths[doc_id] = sum(freq.values())
 
         for term in freq.keys():
             inverted_index.setdefault(term, []).append(doc_id)
+            term_positions.setdefault(term, {})[doc_id] = positions[term]
 
         indexed_pages += 1
 
