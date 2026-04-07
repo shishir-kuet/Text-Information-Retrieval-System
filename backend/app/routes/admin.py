@@ -8,7 +8,6 @@ from backend.app.services.admin_service import (
     process_uploaded_books,
     upload_book,
 )
-from backend.app.services.job_service import list_jobs, submit_job
 from backend.app.services.search_log_service import get_admin_search_logs
 from backend.app.utils.api_response import error, success
 from backend.app.utils.auth import require_admin, require_auth
@@ -21,11 +20,6 @@ def _serialize(doc: dict):
     out = dict(doc)
     out.pop("_id", None)
     return out
-
-
-def _is_wait_mode() -> bool:
-    value = (request.args.get("wait") or "").strip().lower()
-    return value in {"1", "true", "yes", "on"}
 
 
 def _is_full_rebuild_mode() -> bool:
@@ -72,23 +66,10 @@ def domains():
 @require_auth
 @require_admin
 def process_books_route():
-    if _is_wait_mode():
-        result, run_err = process_uploaded_books()
-        if run_err:
-            return error(run_err, status=400)
-        return success(result)
-
-    job = submit_job("process_books", process_uploaded_books, meta={"mode": "uploaded"})
-    return success(
-        {
-            "job_id": job.get("job_id"),
-            "job_type": job.get("job_type"),
-            "status": job.get("status"),
-            "mode": "uploaded",
-        },
-        message="job accepted",
-        status=202,
-    )
+    result, run_err = process_uploaded_books()
+    if run_err:
+        return error(run_err, status=400)
+    return success(result)
 
 
 @bp.post("/index/build")
@@ -96,44 +77,8 @@ def process_books_route():
 @require_admin
 def build_index_route():
     full_rebuild = _is_full_rebuild_mode()
-
-    if _is_wait_mode():
-        result = build_index_and_update(full_rebuild=full_rebuild)
-        return success(result)
-
-    job = submit_job("index_build", build_index_and_update, full_rebuild=full_rebuild, meta={"full_rebuild": full_rebuild})
-    return success(
-        {
-            "job_id": job.get("job_id"),
-            "job_type": job.get("job_type"),
-            "status": job.get("status"),
-            "full_rebuild": full_rebuild,
-        },
-        message="job accepted",
-        status=202,
-    )
-
-
-@bp.get("/jobs")
-@require_auth
-@require_admin
-def list_jobs_route():
-    limit = request.args.get("limit", 50)
-    status = (request.args.get("status") or "").strip() or None
-
-    try:
-        limit = int(limit)
-    except (TypeError, ValueError):
-        return error("limit must be an integer", status=400)
-
-    if limit <= 0 or limit > 500:
-        return error("limit must be between 1 and 500", status=400)
-
-    if status and status not in {"queued", "running", "completed", "failed"}:
-        return error("invalid status filter", status=400)
-
-    items = list_jobs(limit=limit, status=status)
-    return success({"count": len(items), "items": items, "limit": limit, "status": status})
+    result = build_index_and_update(full_rebuild=full_rebuild)
+    return success(result)
 
 
 @bp.get("/books")
