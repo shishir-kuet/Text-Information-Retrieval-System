@@ -6,7 +6,7 @@ from backend.app.config.database import get_database
 
 def _safe_create_index(collection, keys, *, unique: bool = False, name: str | None = None):
     try:
-        kwargs = {"unique": unique}
+        kwargs: dict[str, object] = {"unique": unique}
         if name:
             kwargs["name"] = name
         collection.create_index(keys, **kwargs)
