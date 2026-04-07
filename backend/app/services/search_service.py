@@ -6,8 +6,10 @@ from pathlib import Path
 
 from backend.app.config.database import get_database
 from backend.app.config.paths import SEARCH_INDEX_FILE
+from backend.app.config.settings import settings
 from backend.app.models import ensure_page_document
 from backend.app.utils.storage import resolve_pdf_path
+from backend.app.services.semantic_index_service import SemanticIndexService
 
 
 def _tokenize(text: str):
@@ -53,6 +55,7 @@ class SearchService:
         self.index_file = SEARCH_INDEX_FILE
         self.index_data = None
         self.index_mtime = None
+        self.semantic_service = SemanticIndexService()
 
     def load_index(self, force_reload: bool = False):
         index_path = Path(self.index_file)
@@ -195,7 +198,7 @@ class SearchService:
         if not ranked:
             return []
 
-        candidates = ranked[: max(top_k * 5, top_k)]
+        candidates = ranked[: max(50, top_k * 5)]
         page_filter = [
             {"book_id": book_id, "page_number": page_number}
             for (book_id, page_number), _ in candidates
@@ -211,6 +214,16 @@ class SearchService:
                 key = (page.get("book_id"), page.get("page_number"))
                 page_map[key] = page
 
+        page_ids = [(book_id, page_number) for (book_id, page_number), _ in candidates]
+        try:
+            semantic_scores = self.semantic_service.semantic_scores_for_pages(
+                query=query,
+                page_ids=page_ids,
+                top_k=max(settings.semantic_top_k, top_k * 40),
+            )
+        except Exception:
+            semantic_scores = {pid: 0.0 for pid in page_ids}
+
         reranked = []
         for (book_id, page_number), bm25_score in candidates:
             doc_id = (book_id, page_number)
@@ -219,12 +232,29 @@ class SearchService:
                 continue
 
             boost = self._phrase_proximity_boost(query_terms, doc_id, term_positions)
-            reranked.append((float(bm25_score) + boost, float(bm25_score), doc_id, page))
+            bm25_total = float(bm25_score) + boost
+            semantic_score = float(semantic_scores.get(doc_id, 0.0))
+            text_content = page.get("text_content", "") or ""
+            exact_match = 1.0 if query.lower() in text_content.lower() else 0.0
+            reranked.append((bm25_total, float(bm25_score), semantic_score, exact_match, doc_id, page))
 
-        reranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        if not reranked:
+            return []
+
+        bm25_max = max(item[0] for item in reranked) or 1.0
+        semantic_max = max(item[2] for item in reranked) or 1.0
+
+        scored = []
+        for bm25_total, bm25_raw, semantic_score, exact_match, doc_id, page in reranked:
+            bm25_norm = bm25_total / bm25_max if bm25_max > 0 else 0.0
+            semantic_norm = semantic_score / semantic_max if semantic_max > 0 else 0.0
+            final_score = 0.5 * bm25_norm + 0.4 * semantic_norm + 0.1 * exact_match
+            scored.append((final_score, bm25_total, semantic_score, exact_match, bm25_raw, doc_id, page))
+
+        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
 
         results = []
-        for score, _bm25_score, (book_id, page_number), page in reranked:
+        for score, _bm25_total, _semantic_score, _exact_match, _bm25_score, (book_id, page_number), page in scored:
             text_content = page.get("text_content", "")
             book_info = books_metadata.get(book_id, {})
             results.append(

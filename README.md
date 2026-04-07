@@ -5,6 +5,7 @@ A full-stack academic project for classical information retrieval. Given a line,
 ## Features
 - BM25 search over a persisted inverted index
 - Phrase/proximity-aware reranking (exact order and near-order matches score higher)
+- Hybrid reranking with MiniLM embeddings + FAISS vector index
 - PDF ingestion with text extraction (OCR fallback when needed)
 - Page-level preview using the original PDF page
 - Auth + admin workflow (upload, process, index)
@@ -13,7 +14,7 @@ A full-stack academic project for classical information retrieval. Given a line,
 ## Tech Stack
 - Backend: Python + Flask
 - Database: MongoDB
-- Search/Index: Positional inverted index + BM25 + phrase/proximity reranking (pickle)
+- Search/Index: Positional inverted index + BM25 + phrase/proximity reranking (pickle), plus FAISS semantic index
 - PDF/Text extraction: PyMuPDF + optional OCR (Tesseract + pdf2image)
 - Frontend: React + TypeScript (Vite)
 
@@ -83,6 +84,14 @@ Common backend vars:
 - `JWT_SECRET` (set a strong secret)
 - `BOOKS_PATH` (default `backend/books`)
 - `INDEX_PATH` (default `backend/data/search_index.pkl`)
+- `SEMANTIC_INDEX_PATH` (default `backend/data/semantic.index`)
+- `SEMANTIC_META_PATH` (default `backend/data/semantic_meta.pkl`)
+- `SEMANTIC_PAGE_MAP_PATH` (default `backend/data/semantic_page_map.pkl`)
+- `SEMANTIC_MODEL_NAME` (default `sentence-transformers/all-MiniLM-L6-v2`)
+- `CHUNK_MIN_WORDS` (default `200`)
+- `CHUNK_MAX_WORDS` (default `300`)
+- `CHUNK_TARGET_WORDS` (default `250`)
+- `SEMANTIC_TOP_K` (default `200`)
 - `SERVER_HOST` (default `0.0.0.0`)
 - `SERVER_PORT` (default `5000`)
 - `SERVER_DEBUG` (default `true`)
@@ -100,7 +109,7 @@ Frontend env vars (optional):
 ## Admin Workflow (Typical)
 1. Upload books (PDF)
 2. Process uploaded books (extract pages)
-3. Build index (indexes processed books with term positions)
+3. Build index (BM25 index + semantic chunk embeddings + FAISS)
 
 ## Maintenance Scripts
 These scripts are for local setup/maintenance and are not called by the API.
