@@ -88,7 +88,11 @@ Common backend vars:
 - `SERVER_DEBUG` (default `true`)
 - `TESSERACT_PATH` (Windows example in `.env.example`)
 - `PROCESS_CLEAR_EXISTING_DATA` (default `false`)
-- `JOB_MAX_WORKERS` (default `2`)
+
+AI summarization (optional):
+- Gemini: set `GEMINI_API_KEY` (optional `GEMINI_API_BASE`, `GEMINI_MODEL`)
+	- Prompt template (required): `GEMINI_SUMMARY_PROMPT_TEMPLATE`
+	- Tip: use `\\n` inside `.env` values for multi-line prompts
 
 Frontend env vars (optional):
 - `VITE_API_BASE_URL` (default `http://127.0.0.1:5000`)
@@ -108,6 +112,7 @@ Public:
 - `GET /api/health`
 - `POST /api/search`
 - `GET /api/page/<page_id>`
+- `POST /api/page/<page_id>/summary` (AI summary; requires Gemini env vars)
 - `GET /api/page/<page_id>/pdf` (single-page PDF)
 
 Auth:
@@ -128,7 +133,6 @@ Admin:
 - `GET /api/admin/index/stats`
 - `GET /api/admin/books`
 - `GET /api/admin/logs/search`
-- `GET /api/admin/jobs`
 
 ## Git Hygiene
 This repo ignores runtime/generated files like:

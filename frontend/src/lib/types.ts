@@ -38,6 +38,15 @@ export type PageInfo = {
   }
 }
 
+export type PageSummary = {
+  page_id: string
+  book_id: number
+  display_page_number: string
+  summary: string
+  sentence_count: number
+  source_sentence_count: number
+}
+
 
 export type AuthUser = {
   user_id: number
@@ -96,22 +105,6 @@ export type AdminIndexStats = {
   build_date: string | null
   total_books: number
   total_pages: number
-}
-
-export type JobItem = {
-  job_id: string
-  job_type: string
-  status: string
-  created_at?: string
-  updated_at?: string
-  meta?: Record<string, unknown>
-}
-
-export type JobsResponse = {
-  count: number
-  items: JobItem[]
-  limit: number
-  status: string | null
 }
 
 export type SearchLogsResponse = {

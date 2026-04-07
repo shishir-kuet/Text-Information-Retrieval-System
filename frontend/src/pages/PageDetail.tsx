@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
-import { Download, ExternalLink } from "lucide-react"
+import { Copy, Download, ExternalLink, Sparkles } from "lucide-react"
 import { api } from "../lib/api"
-import type { PageInfo } from "../lib/types"
+import type { PageInfo, PageSummary } from "../lib/types"
 import { Button } from "../components/ui/button"
 import { useAuth } from "../lib/auth"
 
@@ -11,6 +11,11 @@ export default function PageDetail() {
   const { token } = useAuth()
   const [page, setPage] = useState<PageInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<PageSummary | null>(null)
+  const [isSummarizing, setIsSummarizing] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [popupMessage, setPopupMessage] = useState<string | null>(null)
+  const popupTimer = useRef<number | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -18,12 +23,60 @@ export default function PageDetail() {
       try {
         const pageData = await api.page(pageId)
         setPage(pageData)
+        setSummary(null)
+        setSummaryError(null)
+        setPopupMessage(null)
       } catch (err) {
         setError((err as Error).message)
       }
     }
     load()
   }, [pageId])
+
+  useEffect(() => {
+    return () => {
+      if (popupTimer.current) {
+        window.clearTimeout(popupTimer.current)
+        popupTimer.current = null
+      }
+    }
+  }, [])
+
+  const handleSummarize = async () => {
+    if (!pageId || isSummarizing) return
+    setSummaryError(null)
+    setIsSummarizing(true)
+    try {
+      const summaryData = await api.pageSummary(pageId, 3)
+      setSummary(summaryData)
+    } catch (err) {
+      setSummaryError((err as Error).message)
+    } finally {
+      setIsSummarizing(false)
+    }
+  }
+
+  const handleCopySummary = async () => {
+    const textToCopy = (summary?.summary || "").trim()
+    if (!textToCopy) return
+
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("Clipboard unavailable")
+      }
+      await navigator.clipboard.writeText(textToCopy)
+      setPopupMessage("Copied Text")
+      if (popupTimer.current) {
+        window.clearTimeout(popupTimer.current)
+      }
+      popupTimer.current = window.setTimeout(() => {
+        setPopupMessage(null)
+        popupTimer.current = null
+      }, 2000)
+    } catch (err) {
+      setSummaryError((err as Error).message || "Could not copy to clipboard.")
+    }
+  }
 
   if (!pageId) {
     return <div className="text-white/70">Missing page id.</div>
@@ -43,6 +96,11 @@ export default function PageDetail() {
 
   return (
     <div className="space-y-6">
+      {popupMessage && (
+        <div className="fixed right-6 top-6 z-50 rounded-2xl border border-white/15 bg-[var(--color-surface)]/90 px-4 py-3 text-sm text-white shadow-xl">
+          {popupMessage}
+        </div>
+      )}
       <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -57,6 +115,10 @@ export default function PageDetail() {
               <ExternalLink className="mr-2 h-4 w-4" />
               Open Page
             </Button>
+            <Button variant="outline" onClick={handleSummarize} disabled={isSummarizing}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              {isSummarizing ? "Summarizing..." : "Summarize Page"}
+            </Button>
             <Button
               variant="ghost"
               disabled={!downloadUrl}
@@ -66,6 +128,31 @@ export default function PageDetail() {
               Download Book
             </Button>
           </div>
+        </div>
+
+        <div className="card-hover mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm text-white/90">Page Summary</div>
+            {summary && (
+              <Button variant="ghost" onClick={handleCopySummary} title="Copy">
+                <Copy className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {!summary && !summaryError && (
+            <div className="mt-3 text-sm text-white/60">
+              Click "Summarize Page" to generate a quick summary of this page.
+            </div>
+          )}
+          {summaryError && <div className="mt-3 text-sm text-red-300">{summaryError}</div>}
+          {summary && (
+            <>
+              <div className="mt-3 text-sm leading-7 text-white/80">{summary.summary || "No content to summarize."}</div>
+              <div className="mt-2 text-xs text-white/50">
+                {summary.sentence_count} sentence summary from {summary.source_sentence_count} source sentences
+              </div>
+            </>
+          )}
         </div>
 
         <div className="card-hover mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">

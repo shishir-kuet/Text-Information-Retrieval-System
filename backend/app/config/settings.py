@@ -60,7 +60,6 @@ class Settings:
     debug: bool
     tesseract_path: str
     process_clear_existing_data: bool
-    job_max_workers: int
 
 
 settings = Settings(
@@ -74,5 +73,4 @@ settings = Settings(
     debug=_to_bool(os.environ.get("SERVER_DEBUG"), default=True),
     tesseract_path=os.environ.get("TESSERACT_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
     process_clear_existing_data=_to_bool(os.environ.get("PROCESS_CLEAR_EXISTING_DATA"), default=False),
-    job_max_workers=max(1, _to_int(os.environ.get("JOB_MAX_WORKERS"), default=2)),
 )
