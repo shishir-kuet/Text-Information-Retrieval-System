@@ -26,7 +26,6 @@ export default function Admin() {
   const [uploadYear, setUploadYear] = useState("")
 
   const [fullRebuild, setFullRebuild] = useState(false)
-  const [waitMode, setWaitMode] = useState(true)
   const [booksPage, setBooksPage] = useState(1)
   const booksPerPage = 10
 
@@ -118,7 +117,7 @@ export default function Admin() {
     setError(null)
     try {
       setProcessing(true)
-      const response = await api.adminProcessUploaded(token, waitMode)
+      const response = await api.adminProcessUploaded(token)
       const payload = response as {
         processed_count?: number
         total_uploaded?: number
@@ -153,7 +152,7 @@ export default function Admin() {
     setError(null)
     try {
       setBuilding(true)
-      const response = await api.adminBuildIndex(token, fullRebuild, waitMode)
+      const response = await api.adminBuildIndex(token, fullRebuild)
       const payload = response as {
         indexed_books?: number
         skipped?: boolean
@@ -249,23 +248,15 @@ export default function Admin() {
               </div>
               <div className="flex flex-wrap gap-3 text-xs text-white/60">
                 <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={waitMode}
-                    onChange={(event) => setWaitMode(event.target.checked)}
-                  />
-                  Wait for completion (realtime)
-                </label>
-                <label className="flex items-center gap-2">
                   <input type="checkbox" checked={fullRebuild} onChange={(event) => setFullRebuild(event.target.checked)} />
                   Full rebuild
                 </label>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button type="button" variant="outline" onClick={handleProcess} disabled={processing || !waitMode}>
+                <Button type="button" variant="outline" onClick={handleProcess} disabled={processing}>
                   {processing ? "Processing..." : "Process Book"}
                 </Button>
-                <Button type="button" onClick={handleBuild} disabled={building || !waitMode}>
+                <Button type="button" onClick={handleBuild} disabled={building}>
                   {building ? "Building..." : "Build Index"}
                 </Button>
               </div>

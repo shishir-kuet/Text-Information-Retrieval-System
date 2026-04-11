@@ -7,6 +7,7 @@ from flask import Blueprint, request, send_file
 from backend.app.config.database import get_database
 from backend.app.services.search_log_service import create_search_log
 from backend.app.services.search_service import SearchService
+from backend.app.services.ai_summary_service import AiSummaryService
 from backend.app.utils.api_response import error, success
 from backend.app.utils.auth import decode_token, get_current_user_optional
 from backend.app.utils.storage import resolve_pdf_path
@@ -15,7 +16,7 @@ from pymongo.errors import PyMongoError
 
 bp = Blueprint("public", __name__, url_prefix="/api")
 search_service = SearchService()
-
+ai_summary_service = AiSummaryService()
 
 @bp.get("/health")
 def health():
@@ -91,6 +92,51 @@ def get_page(page_id):
     if not page_data:
         return error("page not found", status=404)
     return success(page_data)
+
+
+@bp.post("/page/<page_id>/summary")
+def summarize_page(page_id):
+    page_data = search_service.get_page(page_id)
+    if not page_data:
+        return error("page not found", status=404)
+
+    data = request.get_json(silent=True) or {}
+    max_sentences = data.get("max_sentences", 3)
+
+    try:
+        max_sentences = int(max_sentences)
+    except (TypeError, ValueError):
+        return error("max_sentences must be an integer", status=400)
+
+    if not ai_summary_service.is_configured():
+        return error("AI summarization is not configured", status=503)
+
+    text_content = page_data.get("text_content", "")
+    try:
+        ai_result = ai_summary_service.summarize(text=text_content, max_sentences=max_sentences)
+        used_provider = ai_result.get("provider")
+        summary_text = (ai_result.get("summary") or "").strip()
+    except Exception as exc:
+        return error(str(exc) or "AI summarization failed", status=502)
+
+    if not summary_text:
+        return error("AI summarization returned empty output", status=502)
+
+    summary = {
+        "summary": summary_text,
+        "sentence_count": len(ai_summary_service.split_sentences(summary_text)),
+        "source_sentence_count": len(ai_summary_service.split_sentences(text_content)),
+    }
+
+    return success(
+        {
+            "page_id": page_id,
+            "book_id": page_data.get("book_id"),
+            "display_page_number": page_data.get("display_page_number"),
+            "provider": used_provider,
+            **summary,
+        }
+    )
 
 
 @bp.get("/page/<page_id>/pdf")
