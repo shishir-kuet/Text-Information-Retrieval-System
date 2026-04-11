@@ -47,6 +47,8 @@ class SearchService:
     PHRASE_BOOST = 8.0
     ORDERED_PROXIMITY_BOOST = 2.5
     PROXIMITY_WINDOW = 20
+    SHORT_QUERY_MAX = 3
+    MEDIUM_QUERY_MAX = 8
 
     def __init__(self):
         self.db = get_database()
@@ -181,6 +183,24 @@ class SearchService:
 
         return float(phrase_boost + proximity_boost)
 
+    def _query_term_coverage(self, query_terms, text: str) -> float:
+        if not query_terms or not text:
+            return 0.0
+        text_lower = text.lower()
+        unique_terms = list(dict.fromkeys(query_terms))
+        if not unique_terms:
+            return 0.0
+        hits = sum(1 for term in unique_terms if term in text_lower)
+        return hits / float(len(unique_terms))
+
+    def _dynamic_weights(self, query_terms):
+        length = len(query_terms)
+        if length <= self.SHORT_QUERY_MAX:
+            return 0.7, 0.2, 0.1
+        if length <= self.MEDIUM_QUERY_MAX:
+            return 0.55, 0.35, 0.1
+        return 0.4, 0.5, 0.1
+
     def search(self, query: str, top_k: int = 10):
         query = (query or "").strip()
         if not query:
@@ -235,7 +255,7 @@ class SearchService:
             bm25_total = float(bm25_score) + boost
             semantic_score = float(semantic_scores.get(doc_id, 0.0))
             text_content = page.get("text_content", "") or ""
-            exact_match = 1.0 if query.lower() in text_content.lower() else 0.0
+            exact_match = self._query_term_coverage(query_terms, text_content)
             reranked.append((bm25_total, float(bm25_score), semantic_score, exact_match, doc_id, page))
 
         if not reranked:
@@ -244,11 +264,13 @@ class SearchService:
         bm25_max = max(item[0] for item in reranked) or 1.0
         semantic_max = max(item[2] for item in reranked) or 1.0
 
+        bm25_w, semantic_w, exact_w = self._dynamic_weights(query_terms)
+
         scored = []
         for bm25_total, bm25_raw, semantic_score, exact_match, doc_id, page in reranked:
             bm25_norm = bm25_total / bm25_max if bm25_max > 0 else 0.0
             semantic_norm = semantic_score / semantic_max if semantic_max > 0 else 0.0
-            final_score = 0.5 * bm25_norm + 0.4 * semantic_norm + 0.1 * exact_match
+            final_score = (bm25_w * bm25_norm) + (semantic_w * semantic_norm) + (exact_w * exact_match)
             scored.append((final_score, bm25_total, semantic_score, exact_match, bm25_raw, doc_id, page))
 
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
