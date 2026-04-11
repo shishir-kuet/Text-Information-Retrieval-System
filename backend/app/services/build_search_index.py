@@ -14,6 +14,7 @@ from backend.app.models import (
     ensure_page_document,
     ensure_schema_indexes,
 )
+from backend.app.services.semantic_index_service import build_semantic_index
 
 
 db = get_database()
@@ -191,6 +192,8 @@ def _build_full_index():
     _finalize_index(index_data)
     _save_index_data_atomic(index_data)
 
+    semantic_stats = build_semantic_index(full_rebuild=True)
+
     return {
         "mode": "full",
         "eligible_books": len(eligible_ids),
@@ -200,6 +203,7 @@ def _build_full_index():
         "total_docs": index_data["N"],
         "unique_terms": len(index_data["inverted_index"]),
         "build_date": index_data["build_date"],
+        "semantic": semantic_stats,
     }
 
 
@@ -217,6 +221,10 @@ def _build_incremental_index():
             "build_date": data.get("build_date"),
             "skipped": True,
             "message": "No processed books to index",
+            "semantic": {
+                "skipped": True,
+                "message": "No processed books to index",
+            },
         }
 
     index_data = _load_index_data()
@@ -224,6 +232,8 @@ def _build_incremental_index():
     add_stats = _index_pages_for_books(index_data, processed_ids)
     _finalize_index(index_data)
     _save_index_data_atomic(index_data)
+
+    semantic_stats = build_semantic_index(full_rebuild=False)
 
     return {
         "mode": "incremental",
@@ -234,6 +244,7 @@ def _build_incremental_index():
         "total_docs": index_data["N"],
         "unique_terms": len(index_data["inverted_index"]),
         "build_date": index_data["build_date"],
+        "semantic": semantic_stats,
     }
 
 
@@ -260,6 +271,10 @@ def build_index(full_rebuild: bool = False):
             "build_date": data.get("build_date"),
             "skipped": True,
             "message": "Index build already running",
+            "semantic": {
+                "skipped": True,
+                "message": "Index build already running",
+            },
         }
 
     try:

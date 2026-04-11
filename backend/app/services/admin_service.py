@@ -1,7 +1,7 @@
 ﻿from pathlib import Path
 
 from backend.app.config.database import get_database
-from backend.app.config.paths import BOOKS_DIR, SEARCH_INDEX_FILE
+from backend.app.config.paths import BOOKS_DIR, SEARCH_INDEX_FILE, SEMANTIC_INDEX_FILE, SEMANTIC_META_FILE, SEMANTIC_PAGE_MAP_FILE
 from backend.app.models import (
     BOOK_STATUS_INDEXED,
     BOOK_STATUS_PROCESSED,
@@ -247,6 +247,15 @@ def index_stats():
     exists = idx_path.exists()
     size = idx_path.stat().st_size if exists else 0
 
+    semantic_exists = all(
+        path.exists() for path in (SEMANTIC_INDEX_FILE, SEMANTIC_META_FILE, SEMANTIC_PAGE_MAP_FILE)
+    )
+    semantic_size = 0
+    if semantic_exists:
+        semantic_size = sum(
+            path.stat().st_size for path in (SEMANTIC_INDEX_FILE, SEMANTIC_META_FILE, SEMANTIC_PAGE_MAP_FILE)
+        )
+
     build_date = None
     if exists:
         try:
@@ -265,6 +274,8 @@ def index_stats():
         'index_available': exists,
         'index_size_bytes': size,
         'build_date': build_date,
+        'semantic_index_available': semantic_exists,
+        'semantic_index_size_bytes': semantic_size,
         'total_books': books.count_documents({}),
         'total_pages': pages.count_documents({}),
     }

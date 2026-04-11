@@ -12,12 +12,14 @@ Given a line, sentence, or paragraph of text, the system identifies:
 - A preview of the original PDF page
 
 ## Non-Goals
-- Do not use AI/ML models for the core search process.
+- Do not replace BM25; keep it as the primary candidate retriever.
 
 ## Core Techniques
 - Inverted index
 - BM25 ranking
 - Positional indexing for phrase/proximity scoring
+- Semantic embeddings (MiniLM) for reranking
+- FAISS for vector similarity search
 - OCR (Tesseract) for scanned PDFs when needed
 
 ## Key Principle
@@ -52,6 +54,7 @@ Strategy: compatible schema evolution
 Final collections:
 - `books`
 - `pages`
+- `page_chunks`
 - `users`
 - `search_logs`
 
@@ -73,13 +76,15 @@ The ingestion pipeline is intentionally separated:
 3. Build Index
 - API: `POST /api/admin/index/build`
 - Builds/updates the positional inverted index from processed books
-- Writes `backend/data/search_index.pkl`
+- Builds/updates the semantic chunk index
+- Writes `backend/data/search_index.pkl` + semantic index artifacts
 - Marks processed books as `indexed`
 
 ## Search Workflow
 - API: `POST /api/search`
 - Uses the prebuilt index for candidate retrieval and BM25 ranking
 - Applies phrase/proximity reranking so exact-order and near-order matches are prioritized
+- Applies semantic reranking using FAISS + MiniLM embeddings
 - Returns `book_id`, `title`, `page_id`, `page_number`, `score`, `snippet`
 
 ## Page Preview Workflow
