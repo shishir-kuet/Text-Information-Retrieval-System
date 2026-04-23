@@ -18,6 +18,34 @@ search_service = SearchService()
 ai_summary_service = AiSummaryService()
 library_client = LibraryClient()
 
+
+def _highlight_pdf_bytes(pdf_bytes: bytes, query: str) -> bytes:
+    query = (query or "").strip()
+    if not query:
+        return pdf_bytes
+
+    fitz = __import__("fitz")
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        if doc.page_count == 0:
+            return pdf_bytes
+
+        page = doc[0]
+        candidates = [query]
+        candidates.extend([part for part in query.split() if len(part) >= 3])
+
+        for needle in candidates:
+            for rect in page.search_for(needle):
+                annot = page.add_highlight_annot(rect)
+                if annot is not None:
+                    annot.set_colors(stroke=(1.0, 1.0, 0.0))
+                    annot.set_opacity(0.35)
+                    annot.update()
+
+        return doc.tobytes()
+    finally:
+        doc.close()
+
 @bp.get("/health")
 def health():
     payload = {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
@@ -149,6 +177,13 @@ def open_page_pdf(page_id):
         pdf_bytes, disposition = library_client.get_page_pdf(page_id)
     except Exception:
         return error("failed to render page pdf", status=502)
+
+    query = (request.args.get("q") or "").strip()
+    if query:
+        try:
+            pdf_bytes = _highlight_pdf_bytes(pdf_bytes, query)
+        except Exception:
+            pass
 
     file_name = page_id + ".pdf"
     return send_file(

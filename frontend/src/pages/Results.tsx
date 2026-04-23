@@ -53,6 +53,13 @@ export default function Results() {
     setParams({ q: query, k: topK })
   }
 
+  const buildPdfOpenUrl = (pageId: string, searchQuery: string) => {
+    const base = `${api.baseUrl}/api/page/${pageId}/pdf`
+    const queryText = (searchQuery || "").trim()
+    if (!queryText) return base
+    return `${base}?q=${encodeURIComponent(queryText)}`
+  }
+
   return (
     <div className="space-y-8">
 
@@ -161,12 +168,12 @@ export default function Results() {
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <Link to={`/page/${result.page_id}`}>
+                    <Link to={`/page/${result.page_id}?q=${encodeURIComponent(data.query)}`}>
                       <Button variant="outline" className="h-10">
                         Open details
                       </Button>
                     </Link>
-                    <a href={`${api.baseUrl}/api/page/${result.page_id}/pdf`} target="_blank" rel="noreferrer">
+                    <a href={buildPdfOpenUrl(result.page_id, data.query)} target="_blank" rel="noreferrer">
                       <Button variant="ghost" className="h-10">
                         Open Page
                         <ExternalLink className="ml-2 h-4 w-4" />

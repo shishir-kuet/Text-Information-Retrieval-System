@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useParams } from "react-router-dom"
+import { useLocation, useParams } from "react-router-dom"
 import { Copy, Download, ExternalLink, Sparkles } from "lucide-react"
 import { api } from "../lib/api"
 import type { PageInfo, PageSummary } from "../lib/types"
@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth"
 
 export default function PageDetail() {
   const { pageId } = useParams()
+  const location = useLocation()
   const { token } = useAuth()
   const [page, setPage] = useState<PageInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -90,6 +91,11 @@ export default function PageDetail() {
     return <div className="text-white/70">Loading page...</div>
   }
 
+  const searchQuery = new URLSearchParams(location.search).get("q")?.trim() || ""
+  const openPageUrl = searchQuery
+    ? `${api.baseUrl}/api/page/${page.page_id}/pdf?q=${encodeURIComponent(searchQuery)}`
+    : `${api.baseUrl}/api/page/${page.page_id}/pdf`
+
   const downloadUrl = token
     ? `${api.baseUrl}/api/book/${page.book_id}/download?token=${encodeURIComponent(token)}`
     : null
@@ -110,7 +116,7 @@ export default function PageDetail() {
           <div className="flex gap-3">
             <Button
               variant="outline"
-              onClick={() => window.open(`${api.baseUrl}/api/page/${page.page_id}/pdf`, "_blank")}
+              onClick={() => window.open(openPageUrl, "_blank")}
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               Open Page
