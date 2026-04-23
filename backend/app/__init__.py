@@ -5,6 +5,7 @@ from backend.app.config.settings import settings
 from backend.app.routes.admin import bp as admin_bp
 from backend.app.routes.auth import bp as auth_bp
 from backend.app.routes.history import bp as history_bp
+from backend.app.routes.library_proxy import bp as library_proxy_bp
 from backend.app.routes.public import bp as public_bp
 from backend.app.utils.api_response import error
 
@@ -30,11 +31,14 @@ def create_app() -> Flask:
 
     @app.errorhandler(Exception)
     def handle_unexpected_exception(exc: Exception):
+        # Keep the client response generic, but log the full traceback for debugging.
+        app.logger.exception("Unhandled exception")
         return error("internal server error", status=500)
 
     app.register_blueprint(public_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(history_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(library_proxy_bp)
 
     return app

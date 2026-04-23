@@ -3,11 +3,9 @@ from flask import Blueprint, request
 from backend.app.services.admin_service import (
     build_index_and_update,
     index_stats,
-    list_domains,
     list_books,
-    process_uploaded_books,
-    upload_book,
 )
+from backend.app.services.library_sync_service import LibrarySyncService
 from backend.app.services.search_log_service import get_admin_search_logs
 from backend.app.utils.api_response import error, success
 from backend.app.utils.auth import require_admin, require_auth
@@ -31,44 +29,31 @@ def _is_full_rebuild_mode() -> bool:
 @require_auth
 @require_admin
 def upload():
-    file_storage = request.files.get("file")
-    domain = (request.form.get("domain") or "").strip()
-    title = (request.form.get("title") or "").strip()
-    author = (request.form.get("author") or "").strip()
-    year = (request.form.get("year") or "").strip()
-
-    book_doc, err = upload_book(file_storage, domain, title, author, year)
-    if err == "missing file":
-        return error("file is required", status=400)
-    if err == "missing domain":
-        return error("domain is required", status=400)
-    if err == "missing title":
-        return error("title is required", status=400)
-    if err == "missing author":
-        return error("author is required", status=400)
-    if err == "invalid year":
-        return error("year must be a number", status=400)
-    if err:
-        return error(err, status=400)
-
-    return success(_serialize(book_doc), status=201)
+    return error("upload is handled by the library system", status=410)
 
 
 @bp.get("/domains")
 @require_auth
 @require_admin
 def domains():
-    items = list_domains()
-    return success({"count": len(items), "items": items})
+    return error("domains are handled by the library system", status=410)
 
 
 @bp.post("/process-books")
 @require_auth
 @require_admin
 def process_books_route():
-    result, run_err = process_uploaded_books()
-    if run_err:
-        return error(run_err, status=400)
+    return error("processing is handled by the library system", status=410)
+
+
+@bp.post("/sync/books")
+@require_auth
+@require_admin
+def sync_books_route():
+    try:
+        result = LibrarySyncService().sync_books()
+    except Exception as exc:
+        return error(str(exc) or "sync failed", status=500)
     return success(result)
 
 
@@ -77,7 +62,10 @@ def process_books_route():
 @require_admin
 def build_index_route():
     full_rebuild = _is_full_rebuild_mode()
-    result = build_index_and_update(full_rebuild=full_rebuild)
+    try:
+        result = build_index_and_update(full_rebuild=full_rebuild)
+    except Exception as exc:
+        return error(str(exc) or "index build failed", status=500)
     return success(result)
 
 

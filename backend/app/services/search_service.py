@@ -4,11 +4,9 @@ import re
 from bisect import bisect_right
 from pathlib import Path
 
-from backend.app.config.database import get_database
 from backend.app.config.paths import SEARCH_INDEX_FILE
 from backend.app.config.settings import settings
-from backend.app.models import ensure_page_document
-from backend.app.utils.storage import resolve_pdf_path
+from backend.app.services.library_client import LibraryClient
 from backend.app.services.semantic_index_service import SemanticIndexService
 
 
@@ -51,13 +49,11 @@ class SearchService:
     MEDIUM_QUERY_MAX = 8
 
     def __init__(self):
-        self.db = get_database()
-        self.pages = self.db["pages"]
-        self.books = self.db["books"]
         self.index_file = SEARCH_INDEX_FILE
         self.index_data = None
         self.index_mtime = None
         self.semantic_service = SemanticIndexService()
+        self.library_client = LibraryClient()
 
     def load_index(self, force_reload: bool = False):
         index_path = Path(self.index_file)
@@ -213,26 +209,14 @@ class SearchService:
         data = self.load_index()
         books_metadata = data["books_metadata"]
         term_positions = data.get("term_positions", {})
+        page_texts = data.get("page_texts", {})
+        page_records = data.get("page_records", {})
 
         ranked = sorted(self._bm25_scores(query_terms).items(), key=lambda item: item[1], reverse=True)
         if not ranked:
             return []
 
         candidates = ranked[: max(50, top_k * 5)]
-        page_filter = [
-            {"book_id": book_id, "page_number": page_number}
-            for (book_id, page_number), _ in candidates
-        ]
-
-        page_map = {}
-        if page_filter:
-            for raw_page in self.pages.find(
-                {"$or": page_filter},
-                {"book_id": 1, "page_number": 1, "page_id": 1, "text_content": 1, "display_page_number": 1},
-            ):
-                page = ensure_page_document(raw_page)
-                key = (page.get("book_id"), page.get("page_number"))
-                page_map[key] = page
 
         page_ids = [(book_id, page_number) for (book_id, page_number), _ in candidates]
         try:
@@ -247,14 +231,14 @@ class SearchService:
         reranked = []
         for (book_id, page_number), bm25_score in candidates:
             doc_id = (book_id, page_number)
-            page = page_map.get(doc_id)
-            if not page:
+            page = page_records.get(f"{book_id}_{page_number}") or {}
+            text_content = page_texts.get(doc_id, "") or page.get("text_content", "") or ""
+            if not text_content:
                 continue
 
             boost = self._phrase_proximity_boost(query_terms, doc_id, term_positions)
             bm25_total = float(bm25_score) + boost
             semantic_score = float(semantic_scores.get(doc_id, 0.0))
-            text_content = page.get("text_content", "") or ""
             exact_match = self._query_term_coverage(query_terms, text_content)
             reranked.append((bm25_total, float(bm25_score), semantic_score, exact_match, doc_id, page))
 
@@ -277,7 +261,7 @@ class SearchService:
 
         results = []
         for score, _bm25_total, _semantic_score, _exact_match, _bm25_score, (book_id, page_number), page in scored:
-            text_content = page.get("text_content", "")
+            text_content = page.get("text_content", "") or page_texts.get((book_id, page_number), "") or ""
             book_info = books_metadata.get(book_id, {})
             results.append(
                 {
@@ -296,49 +280,28 @@ class SearchService:
         return results
 
     def get_page(self, page_id: str):
-        raw_page = self.pages.find_one({"page_id": page_id})
-        if not raw_page:
+        payload = self.library_client.get_page(page_id)
+        page = payload if isinstance(payload, dict) else {}
+        if not page:
             return None
-
-        page = ensure_page_document(raw_page)
-        book = self.books.find_one({"book_id": page.get("book_id")}) or {}
-        num_pages = book.get("num_pages")
-        if not num_pages:
-            try:
-                num_pages = self.pages.count_documents({"book_id": page.get("book_id")})
-            except Exception:
-                num_pages = None
-
+        text_content = page.get("text_content", "") or ""
         return {
             "page_id": page.get("page_id"),
             "book_id": page.get("book_id"),
             "page_number": page.get("page_number"),
             "display_page_number": page.get("display_page_number"),
-            "text_content": page.get("text_content", ""),
-            "snippet": _snippet(page.get("text_content", ""), []),
-            "book": {
-                "book_id": book.get("book_id"),
-                "title": book.get("title"),
-                "domain": book.get("domain"),
-                "author": book.get("author"),
-                "year": book.get("year"),
-                "num_pages": num_pages,
-            },
+            "text_content": text_content,
+            "snippet": _snippet(text_content, []),
+            "book": page.get("book") or {},
         }
 
     def get_book_download(self, book_id: int):
-        book = self.books.find_one({"book_id": book_id})
+        book = self.library_client.get_book(book_id)
         if not book:
             return None
-
-        abs_path, pdf_url = resolve_pdf_path(book.get("file_path"))
-        if abs_path is None or not abs_path.exists():
-            raise FileNotFoundError("PDF file not found")
-
         return {
             "book_id": book.get("book_id"),
             "title": book.get("title", "book"),
-            "file_path": str(abs_path),
-            "pdf_url": pdf_url,
             "file_name": book.get("file_name") or f"{book.get('title', 'book')}.pdf",
+            "download_url": f"/api/library/books/{book_id}/download",
         }

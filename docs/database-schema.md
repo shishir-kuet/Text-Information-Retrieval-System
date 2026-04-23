@@ -1,17 +1,20 @@
 ﻿# Database Schema (MongoDB)
 
-## Collections
-- `books`
-- `pages`
-- `users`
-- `search_logs`
+## Databases
+- `library_system`
+- `book_search_system`
 
 ## Design Rule
 Compatible schema evolution.
-- Preserve existing `books` and `pages` data.
-- Extend fields safely.
+- Library owns books/pages/page_chunks and PDF storage.
+- TIRS owns users/search_logs and local search index artifacts.
 
-## books
+## Summarization Update Impact
+- No MongoDB collection change is required for the summarize button improvements.
+- No new fields, collections, or migrations were introduced for provider switching (Gemini/Hugging Face) or extractive fallback.
+- Summarization remains request-time processing based on page text fetched from the Library subsystem.
+
+## Library database: `books`
 Purpose: metadata about each book and its ingestion status.
 
 Recommended indexes:
@@ -27,7 +30,7 @@ Example:
   "domain": "Computer Science",
   "file_name": "Computer Algorithms.pdf",
   "stored_file_name": "book_001.pdf",
-  "file_path": "backend/books/Computer Science/book_001.pdf",
+  "file_path": "backend-library/books/book_001.pdf",
   "num_pages": 777,
   "file_size_mb": 28.64,
   "status": "indexed",
@@ -43,7 +46,7 @@ Statuses:
 - `processed`
 - `indexed`
 
-## pages
+## Library database: `pages`
 Purpose: page-wise extracted text for indexing and ranking.
 
 Recommended indexes:
@@ -66,7 +69,22 @@ Example:
 }
 ```
 
-## users
+## Library database: `page_chunks`
+Purpose: semantic chunk storage for the library side.
+
+Example:
+```json
+{
+  "chunk_id": 1,
+  "book_id": 1,
+  "book_name": "Book Title",
+  "page_number": 12,
+  "chunk_index": 1,
+  "chunk_text": "..."
+}
+```
+
+## TIRS database: `users`
 Purpose: authentication/authorization.
 
 Recommended indexes:
@@ -87,7 +105,7 @@ Example:
 }
 ```
 
-## search_logs
+## TIRS database: `search_logs`
 Purpose: user history + analytics.
 
 Recommended indexes:
@@ -112,3 +130,12 @@ Example:
 ```
 
 Guest searches can be stored with `user_id=null`.
+
+## TIRS local artifacts
+- `backend/data/search_index.pkl`
+- `backend/data/semantic.index`
+- `backend/data/semantic_meta.pkl`
+- `backend/data/semantic_page_map.pkl`
+- `backend/data/library_books_manifest.pkl`
+
+These files are local runtime artifacts and are not stored in MongoDB.

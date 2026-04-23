@@ -1,115 +1,115 @@
 # Text Information Retrieval System (TIRS)
 
-A full-stack academic project for classical information retrieval. Given a line, sentence, or paragraph, the system searches a prebuilt inverted index (BM25-style ranking) and returns the most relevant book + page matches with a PDF page preview.
+This repository now contains two local subsystems:
+- TIRS: auth, search, history, local indexing, search logs
+- Library: upload, processing, page extraction, library-side book/page storage
+
+Both subsystems run locally and use local MongoDB instances/databases.
 
 ## Features
 - BM25 search over a persisted inverted index
-- Phrase/proximity-aware reranking (exact order and near-order matches score higher)
-- Hybrid reranking with MiniLM embeddings + FAISS vector index
-- PDF ingestion with text extraction (OCR fallback when needed)
+- Phrase/proximity-aware reranking
+- Hybrid reranking with MiniLM embeddings + FAISS semantic index
+- Library-side PDF upload and extraction with OCR fallback when needed
 - Page-level preview using the original PDF page
-- Auth + admin workflow (upload, process, index)
+- Auth + admin workflow for TIRS retrieval-side sync/index tasks
 - Search history for logged-in users
 
 ## Tech Stack
-- Backend: Python + Flask
-- Database: MongoDB
-- Search/Index: Positional inverted index + BM25 + phrase/proximity reranking (pickle), plus FAISS semantic index
+- TIRS backend: Python + Flask
+- Library backend: Python + Flask
+- Database: local MongoDB
+- Search/Index: positional inverted index + BM25 + phrase/proximity reranking (pickle), plus FAISS semantic index
 - PDF/Text extraction: PyMuPDF + optional OCR (Tesseract + pdf2image)
-- Frontend: React + TypeScript (Vite)
+- Frontends: React + TypeScript (Vite)
 
 ## Repo Structure
-- `backend/` Flask API and services
-- `frontend/` React UI
+- `backend/` TIRS Flask API and services
+- `frontend/` TIRS React UI
+- `backend-library/` Library Flask API
+- `frontend-library/` Library React UI
 - `docs/` System docs (architecture, schema, requirements)
 
-## Docker Quickstart (Recommended)
+## Local Setup
 
-Prereqs:
-- Docker Desktop (Compose enabled)
-
-Start everything:
-```bash
-docker compose up --build -d
-```
-
-Endpoints:
-- Frontend: `http://127.0.0.1:5173`
-- Backend API: `http://127.0.0.1:5000`
-- Health check: `GET http://127.0.0.1:5000/api/health`
-
-Stop:
-```bash
-docker compose down
-```
-
-## Local Setup (Optional)
-
-### Backend
 Prereqs:
 - Python 3.10+
-- MongoDB running locally
-- Optional OCR: Tesseract (and Poppler for `pdf2image` on Windows)
+- Node.js 18+
+- Local MongoDB running
+- Optional OCR: Tesseract and Poppler for `pdf2image`
 
-Install deps:
+Start the Library subsystem:
 ```bash
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r backend/requirements.txt
+cd backend-library
+python run.py
 ```
 
-Run API:
+Start the TIRS subsystem:
 ```bash
 cd backend
 python run.py
 ```
 
-### Frontend
-Prereqs:
-- Node.js 18+ recommended
-
-Install + run:
+Start the TIRS frontend:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Environment Variables
-Create a `.env` file at the project root or in `backend/.env` (do not commit it). Use `backend/.env.example` as a starting point.
+Start the Library frontend:
+```bash
+cd frontend-library
+npm install
+npm run dev
+```
 
-Common backend vars:
+## Environment Variables
+Create `.env` at the project root or in the subsystem folders.
+
+TIRS backend:
 - `MONGO_URI` (default `mongodb://localhost:27017/`)
 - `DB_NAME` (default `book_search_system`)
-- `JWT_SECRET` (set a strong secret)
-- `BOOKS_PATH` (default `backend/books`)
-- `INDEX_PATH` (default `backend/data/search_index.pkl`)
-- `SEMANTIC_INDEX_PATH` (default `backend/data/semantic.index`)
-- `SEMANTIC_META_PATH` (default `backend/data/semantic_meta.pkl`)
-- `SEMANTIC_PAGE_MAP_PATH` (default `backend/data/semantic_page_map.pkl`)
-- `SEMANTIC_MODEL_NAME` (default `sentence-transformers/all-MiniLM-L6-v2`)
-- `CHUNK_MIN_WORDS` (default `200`)
-- `CHUNK_MAX_WORDS` (default `300`)
-- `CHUNK_TARGET_WORDS` (default `250`)
-- `SEMANTIC_TOP_K` (default `200`)
-- `SERVER_HOST` (default `0.0.0.0`)
-- `SERVER_PORT` (default `5000`)
-- `SERVER_DEBUG` (default `true`)
-- `TESSERACT_PATH` (Windows example in `.env.example`)
-- `PROCESS_CLEAR_EXISTING_DATA` (default `false`)
+- `LIBRARY_API_BASE_URL` (default `http://127.0.0.1:5100`)
+- `JWT_SECRET`
+- `BOOKS_PATH`, `INDEX_PATH`, `SEMANTIC_INDEX_PATH`, `SEMANTIC_META_PATH`, `SEMANTIC_PAGE_MAP_PATH`
+- `SEMANTIC_MODEL_NAME`
+- `CHUNK_MIN_WORDS`, `CHUNK_MAX_WORDS`, `CHUNK_TARGET_WORDS`
+- `SEMANTIC_TOP_K`
+- `SERVER_HOST`, `SERVER_PORT`, `SERVER_DEBUG`
 
-AI summarization (optional):
-- Gemini: set `GEMINI_API_KEY` (optional `GEMINI_API_BASE`, `GEMINI_MODEL`)
-	- Prompt template (required): `GEMINI_SUMMARY_PROMPT_TEMPLATE`
+Library backend:
+- `MONGO_URI`
+- `LIBRARY_DB_NAME` (default `library_system`)
+- `LIBRARY_SERVER_HOST`, `LIBRARY_SERVER_PORT`, `LIBRARY_SERVER_DEBUG`
+- `LIBRARY_BOOKS_PATH`, `LIBRARY_DATA_PATH`
+- `TESSERACT_PATH`
+- `JWT_SECRET` (shared only if you want consistent secrets; not required for library APIs)
+
+AI summarization (TIRS, optional):
+- Provider selector: `SUMMARY_PROVIDER=auto|gemini|huggingface`
+- Gemini:
+	- `GEMINI_API_KEY`
+	- Optional: `GEMINI_API_BASE`, `GEMINI_MODEL`
+	- Required template: `GEMINI_SUMMARY_PROMPT_TEMPLATE`
 	- Tip: use `\\n` inside `.env` values for multi-line prompts
+- Hugging Face:
+	- `HF_API_KEY`
+	- Optional: `HF_API_BASE` (recommended: `https://router.huggingface.co/hf-inference/models`)
+	- `HF_MODEL` (example: `facebook/bart-large-cnn`)
+- Reliability behavior:
+	- If remote AI providers fail (quota, endpoint, network), backend falls back to local extractive summary.
+	- The API still returns success with `provider: "extractive"` so the summarize button remains usable.
 
-Frontend env vars (optional):
-- `VITE_API_BASE_URL` (default `http://127.0.0.1:5000`)
+Frontend env vars:
+- TIRS frontend: `VITE_API_BASE_URL` (default `http://127.0.0.1:5000`)
+- Library frontend: `VITE_LIBRARY_API_BASE_URL` (default `http://127.0.0.1:5100`)
 
 ## Admin Workflow (Typical)
-1. Upload books (PDF)
-2. Process uploaded books (extract pages)
-3. Build index (BM25 index + semantic chunk embeddings + FAISS)
+1. Upload books in the Library subsystem
+2. Process uploaded books in the Library subsystem
+3. Sync books into TIRS
+4. Build/update the TIRS local search index
 
 ## Maintenance Scripts
 These scripts are for local setup/maintenance and are not called by the API.
@@ -121,8 +121,9 @@ Public:
 - `GET /api/health`
 - `POST /api/search`
 - `GET /api/page/<page_id>`
-- `POST /api/page/<page_id>/summary` (AI summary; requires Gemini env vars)
+- `POST /api/page/<page_id>/summary` (AI summary; supports Gemini/Hugging Face + local extractive fallback)
 - `GET /api/page/<page_id>/pdf` (single-page PDF)
+- `GET /api/library/books`, `GET /api/library/books/<book_id>`, `GET /api/library/books/<book_id>/pages`, `GET /api/library/pages/<page_id>`, `GET /api/library/pages/<page_id>/text`
 
 Auth:
 - `POST /api/auth/register`
@@ -137,7 +138,7 @@ User:
 - `GET /api/book/<book_id>/download` (login required)
 
 Admin:
-- `POST /api/admin/upload`
+- `POST /api/admin/sync/books`
 - `POST /api/admin/index/build`
 - `GET /api/admin/index/stats`
 - `GET /api/admin/books`
@@ -145,7 +146,7 @@ Admin:
 
 ## Git Hygiene
 This repo ignores runtime/generated files like:
-- Uploaded PDFs (`backend/books/`)
+- Uploaded PDFs (`backend-library/books/`)
 - Built search index artifacts (`backend/data/*.pkl`)
 - Virtual envs, node_modules, build outputs
 

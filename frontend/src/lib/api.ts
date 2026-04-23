@@ -3,9 +3,8 @@ import type {
   AdminIndexStats,
   AuthResponse,
   AuthUser,
-  BooksResponse,
-  DomainListResponse,
   HistoryResponse,
+  LibraryBooksResponse,
   PageInfo,
   PageSummary,
   SearchLogsResponse,
@@ -35,25 +34,6 @@ async function requestJson<T>(
       "Content-Type": "application/json",
       ...(options.headers || {}),
     }),
-  })
-
-  const payload = (await response.json()) as ApiResponse<T>
-  if (!response.ok || !payload.success) {
-    throw new Error(payload.message || "Request failed")
-  }
-
-  return payload.data
-}
-
-async function requestForm<T>(
-  path: string,
-  body: FormData,
-  token?: string,
-): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    body,
-    headers: buildHeaders(token),
   })
 
   const payload = (await response.json()) as ApiResponse<T>
@@ -97,15 +77,13 @@ export const api = {
     requestJson<{ deleted: number }>(`/api/history/${logId}`, { method: "DELETE" }, token),
   clearHistory: (token: string) =>
     requestJson<{ deleted: number }>("/api/history", { method: "DELETE" }, token),
-  adminUpload: (token: string, data: FormData) => requestForm<Record<string, unknown>>("/api/admin/upload", data, token),
-  adminProcessUploaded: (token: string) =>
-    requestJson<Record<string, unknown>>("/api/admin/process-books", { method: "POST" }, token),
   adminBuildIndex: (token: string, full = false) =>
     requestJson<Record<string, unknown>>(`/api/admin/index/build?full=${full ? 1 : 0}`, { method: "POST" }, token),
+  adminSyncBooks: (token: string) =>
+    requestJson<Record<string, unknown>>("/api/admin/sync/books", { method: "POST" }, token),
   adminIndexStats: (token: string) => requestJson<AdminIndexStats>("/api/admin/index/stats", {}, token),
   adminBooks: (token: string, limit = 200) =>
-    requestJson<BooksResponse>(`/api/admin/books?limit=${limit}`, {}, token),
-  adminDomains: (token: string) => requestJson<DomainListResponse>("/api/admin/domains", {}, token),
+    requestJson<LibraryBooksResponse>(`/api/library/books?limit=${limit}`, {}, token),
   adminSearchLogs: (token: string, limit = 100, skip = 0) =>
     requestJson<SearchLogsResponse>(`/api/admin/logs/search?limit=${limit}&skip=${skip}`, {}, token),
 }
