@@ -81,7 +81,7 @@ export type HistoryResponse = {
 export type BookItem = {
   book_id: number
   title: string
-  domain: string
+  domain?: string
   status: string
   num_pages?: number
   file_size_mb?: number
@@ -94,22 +94,31 @@ export type BooksResponse = {
   items: BookItem[]
 }
 
-export type DomainListResponse = {
+export type LibraryBooksResponse = {
   count: number
-  items: string[]
+  items: BookItem[]
 }
 
 export type AdminIndexStats = {
   index_available: boolean
   index_size_bytes: number
   build_date: string | null
-  total_books: number
-  total_pages: number
+  semantic_index_available: boolean
+  semantic_index_size_bytes: number
+  total_users: number
+  total_search_logs: number
 }
 
 export type SearchLogsResponse = {
   count: number
-  items: Array<Record<string, unknown>>
+  items: Array<{
+    log_id: number
+    user_id: number | null
+    query_text: string
+    total_results: number
+    latency_ms: number
+    created_at: string
+  }>
   limit: number
   skip: number
 }

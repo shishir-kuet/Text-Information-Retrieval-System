@@ -4,19 +4,19 @@ import time
 
 from flask import Blueprint, request, send_file
 
-from backend.app.config.database import get_database
 from backend.app.services.search_log_service import create_search_log
+from backend.app.services.library_client import LibraryClient
 from backend.app.services.search_service import SearchService
 from backend.app.services.ai_summary_service import AiSummaryService
 from backend.app.utils.api_response import error, success
 from backend.app.utils.auth import decode_token, get_current_user_optional
-from backend.app.utils.storage import resolve_pdf_path
 from pymongo.errors import PyMongoError
 
 
 bp = Blueprint("public", __name__, url_prefix="/api")
 search_service = SearchService()
 ai_summary_service = AiSummaryService()
+library_client = LibraryClient()
 
 @bp.get("/health")
 def health():
@@ -145,46 +145,12 @@ def open_page_pdf(page_id):
 
     This avoids exposing the full book PDF to unauthenticated users via the browser PDF viewer.
     """
-    db = get_database()
-
-    raw_page = db["pages"].find_one({"page_id": page_id})
-    if not raw_page:
-        return error("page not found", status=404)
-
-    book_id = raw_page.get("book_id")
-    page_number = raw_page.get("page_number")
-    if book_id is None or page_number is None:
-        return error("page not found", status=404)
-
-    book = db["books"].find_one({"book_id": book_id})
-    if not book:
-        return error("book not found", status=404)
-
-    abs_path, _ = resolve_pdf_path(book.get("file_path"))
-    if abs_path is None or not abs_path.exists():
-        return error("pdf file not found", status=404)
-
     try:
-        import fitz
-
-        src = fitz.open(str(abs_path))
-        try:
-            idx = int(page_number) - 1
-            if idx < 0 or idx >= src.page_count:
-                return error("page not found", status=404)
-
-            single = fitz.open()
-            try:
-                single.insert_pdf(src, from_page=idx, to_page=idx)
-                pdf_bytes = single.tobytes()
-            finally:
-                single.close()
-        finally:
-            src.close()
+        pdf_bytes, disposition = library_client.get_page_pdf(page_id)
     except Exception:
-        return error("failed to render page pdf", status=500)
+        return error("failed to render page pdf", status=502)
 
-    file_name = f"book_{int(book_id):03d}_page_{int(page_number):04d}.pdf"
+    file_name = page_id + ".pdf"
     return send_file(
         BytesIO(pdf_bytes),
         as_attachment=False,
@@ -214,17 +180,21 @@ def download_book(book_id):
         return error("Missing token", status=401)
 
     try:
-        download_data = search_service.get_book_download(book_id)
+        pdf_bytes, disposition = library_client.download_book(book_id)
     except FileNotFoundError:
         return error("pdf file not found", status=404)
+    except Exception:
+        return error("pdf file not found", status=404)
 
-    if not download_data:
+    if not pdf_bytes:
         return error("book not found", status=404)
 
+    download_name = f"book_{book_id:03d}.pdf"
+
     return send_file(
-        download_data["file_path"],
+        BytesIO(pdf_bytes),
         as_attachment=True,
-        download_name=download_data["file_name"],
+        download_name=download_name,
         mimetype="application/pdf",
         conditional=False,
     )

@@ -53,6 +53,7 @@ class Settings:
     mongo_uri: str
     db_name: str
     jwt_secret: str
+    library_api_base_url: str
     books_path: Path
     index_path: Path
     semantic_index_path: Path
@@ -74,6 +75,7 @@ settings = Settings(
     mongo_uri=os.environ.get("MONGO_URI", "mongodb://localhost:27017/"),
     db_name=os.environ.get("DB_NAME", "book_search_system"),
     jwt_secret=os.environ.get("JWT_SECRET", "change-me"),
+    library_api_base_url=os.environ.get("LIBRARY_API_BASE_URL", "http://127.0.0.1:5100"),
     books_path=_resolve_path(os.environ.get("BOOKS_PATH", ""), "backend/books"),
     index_path=_resolve_path(os.environ.get("INDEX_PATH", ""), "backend/data/search_index.pkl"),
     semantic_index_path=_resolve_path(os.environ.get("SEMANTIC_INDEX_PATH", ""), "backend/data/semantic.index"),

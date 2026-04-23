@@ -94,6 +94,20 @@ APIs:
 
 Note: The single-page PDF endpoint is used to avoid exposing the full book PDF to guests via the browser PDF viewer.
 
+## AI Summary Workflow
+API:
+- `POST /api/page/<page_id>/summary`
+
+Behavior:
+- Supports provider-based summarization via environment config.
+- `SUMMARY_PROVIDER=gemini` uses Gemini.
+- `SUMMARY_PROVIDER=huggingface` uses Hugging Face Inference.
+- `SUMMARY_PROVIDER=auto` tries configured providers in sequence.
+
+Reliability requirement:
+- If external provider calls fail (quota/rate-limit, invalid endpoint, or network), the API must return a local extractive summary instead of failing the user action.
+- Response includes `provider` value so UI can indicate which summarizer produced the output (`gemini`, `huggingface`, or `extractive`).
+
 ## Authentication and Access Rules
 JWT is used for authentication.
 
