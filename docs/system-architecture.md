@@ -4,14 +4,16 @@
 - Frontend: React + TypeScript (Vite)
 - Backend: Flask API
 - Database: MongoDB (`book_search_system`)
-- Search index: `backend/data/search_index.pkl` (pickle)
+- Search indexes:
+	- `backend/data/search_index.pkl` (BM25 positional index)
+	- `backend/data/semantic.index` + `backend/data/semantic_meta.pkl` + `backend/data/semantic_page_map.pkl` (FAISS + metadata)
 - File storage: `backend/books/` (PDFs)
 
 ## High-Level Flow
 1. Admin uploads a book (filesystem + DB metadata)
 2. Admin processes the book (extract text into `pages`)
-3. Admin builds the index with term positions (writes `.pkl` file)
-4. User searches (BM25 candidate retrieval + phrase/proximity reranking)
+3. Admin builds the indexes with term positions + semantic embeddings (writes BM25 + FAISS files)
+4. User searches (BM25 candidate retrieval + phrase/proximity reranking + semantic reranking)
 5. User opens the matched page preview (PDF page)
 
 ## Directory Structure
@@ -38,10 +40,10 @@ Runtime folders (ignored by git):
 - Utils layer: auth/JWT, PDF helpers, storage path normalization
 
 ## Indexing Design
-- Search runs only on the prebuilt index (fast runtime)
-- Index builds from processed books/pages and stores token positions
+- Search runs only on prebuilt indexes (fast runtime)
+- Index builds from processed books/pages and stores token positions + semantic chunk embeddings
 - Default behavior is incremental (avoid full rebuild when possible)
-- Ranking uses BM25 as baseline, then applies order/proximity boosts
+- Ranking uses BM25 as baseline, then applies order/proximity boosts and semantic reranking
 
 ## PDF Preview Design
 - Extracted text is used for ranking/snippets only

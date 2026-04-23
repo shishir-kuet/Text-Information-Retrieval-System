@@ -27,6 +27,8 @@ backend/books/
 backend/data/search_index.pkl
 backend/data/exports/
 backend/data/*.pkl
+backend/data/*.index
+backend/data/*.faiss
 backend/data/*.sqlite
 backend/data/*.sqlite3
 backend/data/*.db

@@ -55,12 +55,19 @@ class Settings:
     jwt_secret: str
     books_path: Path
     index_path: Path
+    semantic_index_path: Path
+    semantic_meta_path: Path
+    semantic_page_map_path: Path
+    semantic_model_name: str
+    chunk_min_words: int
+    chunk_max_words: int
+    chunk_target_words: int
+    semantic_top_k: int
     host: str
     port: int
     debug: bool
     tesseract_path: str
     process_clear_existing_data: bool
-    job_max_workers: int
 
 
 settings = Settings(
@@ -69,10 +76,17 @@ settings = Settings(
     jwt_secret=os.environ.get("JWT_SECRET", "change-me"),
     books_path=_resolve_path(os.environ.get("BOOKS_PATH", ""), "backend/books"),
     index_path=_resolve_path(os.environ.get("INDEX_PATH", ""), "backend/data/search_index.pkl"),
+    semantic_index_path=_resolve_path(os.environ.get("SEMANTIC_INDEX_PATH", ""), "backend/data/semantic.index"),
+    semantic_meta_path=_resolve_path(os.environ.get("SEMANTIC_META_PATH", ""), "backend/data/semantic_meta.pkl"),
+    semantic_page_map_path=_resolve_path(os.environ.get("SEMANTIC_PAGE_MAP_PATH", ""), "backend/data/semantic_page_map.pkl"),
+    semantic_model_name=os.environ.get("SEMANTIC_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"),
+    chunk_min_words=_to_int(os.environ.get("CHUNK_MIN_WORDS"), default=200),
+    chunk_max_words=_to_int(os.environ.get("CHUNK_MAX_WORDS"), default=300),
+    chunk_target_words=_to_int(os.environ.get("CHUNK_TARGET_WORDS"), default=250),
+    semantic_top_k=_to_int(os.environ.get("SEMANTIC_TOP_K"), default=200),
     host=os.environ.get("SERVER_HOST", "0.0.0.0"),
     port=_to_int(os.environ.get("SERVER_PORT"), default=5000),
     debug=_to_bool(os.environ.get("SERVER_DEBUG"), default=True),
     tesseract_path=os.environ.get("TESSERACT_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
     process_clear_existing_data=_to_bool(os.environ.get("PROCESS_CLEAR_EXISTING_DATA"), default=False),
-    job_max_workers=max(1, _to_int(os.environ.get("JOB_MAX_WORKERS"), default=2)),
 )

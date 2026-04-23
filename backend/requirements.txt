@@ -4,3 +4,6 @@ PyMuPDF
 pytesseract
 pdf2image
 PyJWT
+sentence-transformers
+faiss-cpu
+numpy
