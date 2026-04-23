@@ -147,7 +147,19 @@ def _build_full_index(client: LibraryClient):
 
     _finalize_index(index_data)
     _save_index_data_atomic(index_data)
-    semantic_stats = build_semantic_index(full_rebuild=True)
+    try:
+        semantic_stats = build_semantic_index(full_rebuild=True)
+    except Exception as exc:
+        semantic_stats = {
+            "mode": "full",
+            "indexed_books": 0,
+            "indexed_chunks": 0,
+            "empty_pages": 0,
+            "total_chunks": 0,
+            "build_date": _now_str(),
+            "skipped": True,
+            "message": f"Semantic index skipped: {exc}",
+        }
 
     return {
         "mode": "full",
@@ -158,6 +170,7 @@ def _build_full_index(client: LibraryClient):
         "unique_terms": len(index_data["inverted_index"]),
         "build_date": index_data["build_date"],
         "semantic": semantic_stats,
+        "message": semantic_stats.get("message") if semantic_stats.get("skipped") else None,
     }
 
 

@@ -75,7 +75,13 @@ class SemanticIndexService:
 
     def _load_model(self) -> SentenceTransformer:
         if self.model is None:
-            self.model = SentenceTransformer(settings.semantic_model_name)
+            # Force CPU + disable low_cpu_mem_usage to avoid occasional
+            # meta-tensor loading failures on some torch/transformers combos.
+            self.model = SentenceTransformer(
+                settings.semantic_model_name,
+                device="cpu",
+                model_kwargs={"low_cpu_mem_usage": False},
+            )
         return self.model
 
     def index_available(self) -> bool:
