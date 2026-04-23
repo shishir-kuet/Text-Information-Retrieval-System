@@ -197,6 +197,27 @@ class SearchService:
             return 0.55, 0.35, 0.1
         return 0.4, 0.5, 0.1
 
+    def _resolve_title(self, *, book_id: int, page: dict, books_metadata: dict, title_cache: dict[int, str]) -> str:
+        book_info = books_metadata.get(book_id, {}) if isinstance(books_metadata, dict) else {}
+        title = (book_info.get("title") or page.get("title") or "").strip()
+        if title and title.lower() != "unknown":
+            return title
+
+        cached = title_cache.get(book_id)
+        if cached:
+            return cached
+
+        try:
+            book_payload = self.library_client.get_book(book_id)
+            remote_title = (book_payload.get("title") or "").strip() if isinstance(book_payload, dict) else ""
+            if remote_title:
+                title_cache[book_id] = remote_title
+                return remote_title
+        except Exception:
+            pass
+
+        return "Unknown"
+
     def search(self, query: str, top_k: int = 10):
         query = (query or "").strip()
         if not query:
@@ -260,13 +281,14 @@ class SearchService:
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
 
         results = []
+        title_cache: dict[int, str] = {}
         for score, _bm25_total, _semantic_score, _exact_match, _bm25_score, (book_id, page_number), page in scored:
             text_content = page.get("text_content", "") or page_texts.get((book_id, page_number), "") or ""
-            book_info = books_metadata.get(book_id, {})
+            title = self._resolve_title(book_id=book_id, page=page, books_metadata=books_metadata, title_cache=title_cache)
             results.append(
                 {
                     "book_id": book_id,
-                    "title": book_info.get("title", "Unknown"),
+                    "title": title,
                     "page_id": page.get("page_id", f"{book_id}_{page_number}"),
                     "page_number": page_number,
                     "score": round(float(score), 6),

@@ -16,12 +16,60 @@ from app.models import (
 from app.utils.pdf_processing import extract_page_text, get_pdf_page_count
 from app.utils.storage import make_book_file_path, resolve_pdf_path
 
+CHUNK_MIN_WORDS = 200
+CHUNK_MAX_WORDS = 300
+CHUNK_TARGET_WORDS = 250
+
 
 def _next_book_id(db) -> int:
     last = db["books"].find_one(sort=[("book_id", -1)])
     if not last or "book_id" not in last:
         return 1
     return int(last["book_id"]) + 1
+
+
+def _split_into_chunks(text: str) -> list[str]:
+    words = (text or "").split()
+    if not words:
+        return []
+
+    chunks: list[list[str]] = []
+    index = 0
+    total = len(words)
+
+    while index < total:
+        remaining = total - index
+        if remaining <= CHUNK_MAX_WORDS:
+            if remaining < CHUNK_MIN_WORDS and chunks:
+                chunks[-1].extend(words[index:])
+                break
+            chunks.append(words[index:])
+            break
+
+        size = min(CHUNK_TARGET_WORDS, CHUNK_MAX_WORDS)
+        if remaining < size + CHUNK_MIN_WORDS:
+            size = max(CHUNK_MIN_WORDS, remaining - CHUNK_MIN_WORDS)
+
+        chunk_words = words[index : index + size]
+        chunks.append(chunk_words)
+        index += size
+
+    return [" ".join(chunk) for chunk in chunks]
+
+
+def _build_chunk_doc(*, book_id: int, page_number: int, chunk_index: int, chunk_text: str) -> dict:
+    ts = now_str()
+    return {
+        "chunk_id": f"{book_id}_{page_number}_{chunk_index}",
+        "book_id": book_id,
+        "page_id": f"{book_id}_{page_number}",
+        "page_number": page_number,
+        "chunk_index": chunk_index,
+        "chunk_text": chunk_text,
+        "word_count": len(chunk_text.split()),
+        "char_count": len(chunk_text),
+        "created_at": ts,
+    }
 
 
 def upload_book(file_storage, title: str, author: str = "", year: str | None = None):
@@ -78,6 +126,7 @@ def process_book(book_id: int):
     db = get_database()
     books = db["books"]
     pages = db["pages"]
+    page_chunks = db["page_chunks"]
 
     book = books.find_one({"book_id": book_id})
     if not book:
@@ -93,7 +142,10 @@ def process_book(book_id: int):
         doc = __import__("fitz").open(str(abs_path))
         num_pages = len(doc)
         pages.delete_many({"book_id": book_id})
+        page_chunks.delete_many({"book_id": book_id})
         pages_batch = []
+        chunks_batch = []
+        chunk_count = 0
 
         for page_num in range(num_pages):
             text = extract_page_text(doc, abs_path, page_num)
@@ -103,15 +155,37 @@ def process_book(book_id: int):
                 pages.insert_many(pages_batch)
                 pages_batch = []
 
+            chunks = _split_into_chunks(text)
+            for chunk_index, chunk_text in enumerate(chunks, start=1):
+                chunks_batch.append(
+                    _build_chunk_doc(
+                        book_id=book_id,
+                        page_number=page_num + 1,
+                        chunk_index=chunk_index,
+                        chunk_text=chunk_text,
+                    )
+                )
+                chunk_count += 1
+                if len(chunks_batch) >= 200:
+                    page_chunks.insert_many(chunks_batch)
+                    chunks_batch = []
+
         if pages_batch:
             pages.insert_many(pages_batch)
+        if chunks_batch:
+            page_chunks.insert_many(chunks_batch)
 
         books.update_one(
             {"book_id": book_id},
             {"$set": {"status": BOOK_STATUS_PROCESSED, "num_pages": num_pages, "updated_at": now_str()}},
         )
 
-        return {"book_id": book_id, "num_pages": num_pages, "status": BOOK_STATUS_PROCESSED}, None
+        return {
+            "book_id": book_id,
+            "num_pages": num_pages,
+            "chunk_count": chunk_count,
+            "status": BOOK_STATUS_PROCESSED,
+        }, None
     finally:
         if doc is not None:
             doc.close()
