@@ -16,7 +16,7 @@ def _tokenize(text: str):
     return text.split()
 
 
-def _snippet(text: str, query_terms, max_len: int = 220):
+def _snippet(text: str, query_terms, max_len: int = 220, semantic_hint: str = ""):
     if not text:
         return ""
 
@@ -28,6 +28,12 @@ def _snippet(text: str, query_terms, max_len: int = 220):
             break
 
     if hit_pos < 0:
+        # For semantic matches with weak lexical overlap, prefer the matched semantic chunk.
+        if semantic_hint:
+            hint = (semantic_hint or "").strip()
+            if len(hint) > max_len:
+                hint = hint[:max_len].rstrip() + "..."
+            return hint
         return text[:max_len] + ("..." if len(text) > max_len else "")
 
     start = max(0, hit_pos - (max_len // 2))
@@ -47,6 +53,9 @@ class SearchService:
     PROXIMITY_WINDOW = 20
     SHORT_QUERY_MAX = 3
     MEDIUM_QUERY_MAX = 8
+    BM25_CANDIDATE_MIN = 250
+    SEMANTIC_PAGE_CANDIDATE_MIN = 200
+    SEMANTIC_CHUNK_CANDIDATE_MIN = 1200
 
     def __init__(self):
         self.index_file = SEARCH_INDEX_FILE
@@ -72,6 +81,30 @@ class SearchService:
     def index_available(self):
         return Path(self.index_file).exists()
 
+    def _expand_query_terms(self, query_terms):
+        if not query_terms:
+            return []
+
+        expansions = {
+            "limitations": ["limitation", "limited"],
+            "limitation": ["limitations", "limited"],
+            "datasets": ["dataset", "data"],
+            "dataset": ["datasets", "data"],
+            "using": ["use"],
+            "different": ["any", "varied"],
+            "fixed": ["static"],
+        }
+
+        seen = set(query_terms)
+        expanded = []
+        for term in query_terms:
+            for alt in expansions.get(term, []):
+                if alt in seen:
+                    continue
+                seen.add(alt)
+                expanded.append(alt)
+        return expanded
+
     def _bm25_scores(self, query_terms):
         data = self.load_index()
         inverted_index = data["inverted_index"]
@@ -87,7 +120,11 @@ class SearchService:
         avg_dl = sum(doc_lengths.values()) / n_docs
         scores = {}
 
-        for term in query_terms:
+        expanded_terms = self._expand_query_terms(query_terms)
+        weighted_terms = [(term, 1.0) for term in query_terms]
+        weighted_terms.extend((term, 0.55) for term in expanded_terms)
+
+        for term, term_weight in weighted_terms:
             if term not in inverted_index:
                 continue
 
@@ -98,6 +135,7 @@ class SearchService:
                 tf = term_freqs[doc_id][term]
                 dl = doc_lengths[doc_id]
                 score = idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avg_dl)))
+                score *= term_weight
                 scores[doc_id] = scores.get(doc_id, 0.0) + score
 
         return scores
@@ -179,23 +217,59 @@ class SearchService:
 
         return float(phrase_boost + proximity_boost)
 
-    def _query_term_coverage(self, query_terms, text: str) -> float:
-        if not query_terms or not text:
+    def _term_coverage(self, terms, text: str) -> float:
+        if not terms or not text:
             return 0.0
         text_lower = text.lower()
-        unique_terms = list(dict.fromkeys(query_terms))
+        unique_terms = list(dict.fromkeys(terms))
         if not unique_terms:
             return 0.0
         hits = sum(1 for term in unique_terms if term in text_lower)
         return hits / float(len(unique_terms))
+
+    def _query_term_coverage(self, query_terms, text: str) -> float:
+        return self._term_coverage(query_terms, text)
+
+    def _query_ngram_boost(self, query_terms, text: str) -> float:
+        if not query_terms or not text:
+            return 0.0
+
+        filtered_terms = [term for term in query_terms if len(term) >= 3]
+        if len(filtered_terms) < 2:
+            return 0.0
+
+        text_lower = text.lower()
+        weighted_hits = 0.0
+        weighted_total = 0.0
+        for n in (3, 2):
+            if len(filtered_terms) < n:
+                continue
+            phrases = []
+            for idx in range(len(filtered_terms) - n + 1):
+                phrases.append(" ".join(filtered_terms[idx : idx + n]))
+
+            unique_phrases = list(dict.fromkeys(phrases))
+            if not unique_phrases:
+                continue
+
+            weight = 1.8 if n == 3 else 1.0
+            hits = sum(1 for phrase in unique_phrases if phrase in text_lower)
+            weighted_hits += weight * hits
+            weighted_total += weight * len(unique_phrases)
+
+        if weighted_total <= 0:
+            return 0.0
+
+        ratio = weighted_hits / weighted_total
+        return min(2.4, ratio * 2.4)
 
     def _dynamic_weights(self, query_terms):
         length = len(query_terms)
         if length <= self.SHORT_QUERY_MAX:
             return 0.7, 0.2, 0.1
         if length <= self.MEDIUM_QUERY_MAX:
-            return 0.55, 0.35, 0.1
-        return 0.4, 0.5, 0.1
+            return 0.55, 0.3, 0.15
+        return 0.45, 0.35, 0.2
 
     def _resolve_title(self, *, book_id: int, page: dict, books_metadata: dict, title_cache: dict[int, str]) -> str:
         book_info = books_metadata.get(book_id, {}) if isinstance(books_metadata, dict) else {}
@@ -226,6 +300,7 @@ class SearchService:
         query_terms = _tokenize(query)
         if not query_terms:
             return []
+        expanded_terms = self._expand_query_terms(query_terms)
 
         data = self.load_index()
         books_metadata = data["books_metadata"]
@@ -234,23 +309,24 @@ class SearchService:
         page_records = data.get("page_records", {})
 
         ranked = sorted(self._bm25_scores(query_terms).items(), key=lambda item: item[1], reverse=True)
-        if not ranked:
-            return []
+        bm25_candidates = ranked[: max(self.BM25_CANDIDATE_MIN, top_k * 25)]
+        bm25_candidate_ids = {(book_id, page_number) for (book_id, page_number), _ in bm25_candidates}
 
-        candidates = ranked[: max(50, top_k * 5)]
-
-        page_ids = [(book_id, page_number) for (book_id, page_number), _ in candidates]
+        semantic_candidate_ids: set[tuple[int, int]] = set()
         try:
-            semantic_scores = self.semantic_service.semantic_scores_for_pages(
+            semantic_pages = self.semantic_service.semantic_top_pages(
                 query=query,
-                page_ids=page_ids,
-                top_k=max(settings.semantic_top_k, top_k * 40),
+                top_k=max(self.SEMANTIC_PAGE_CANDIDATE_MIN, top_k * 30),
+                chunk_top_k=max(self.SEMANTIC_CHUNK_CANDIDATE_MIN, settings.semantic_top_k * 6, top_k * 250),
             )
+            semantic_candidate_ids = set(semantic_pages.keys())
         except Exception:
-            semantic_scores = {pid: 0.0 for pid in page_ids}
+            semantic_pages = {}
 
+        candidate_ids = list(bm25_candidate_ids | semantic_candidate_ids)
         reranked = []
-        for (book_id, page_number), bm25_score in candidates:
+        bm25_score_map = dict(bm25_candidates)
+        for book_id, page_number in candidate_ids:
             doc_id = (book_id, page_number)
             page = page_records.get(f"{book_id}_{page_number}") or {}
             text_content = page_texts.get(doc_id, "") or page.get("text_content", "") or ""
@@ -258,10 +334,13 @@ class SearchService:
                 continue
 
             boost = self._phrase_proximity_boost(query_terms, doc_id, term_positions)
-            bm25_total = float(bm25_score) + boost
-            semantic_score = float(semantic_scores.get(doc_id, 0.0))
+            bm25_score = float(bm25_score_map.get(doc_id, 0.0))
+            ngram_boost = self._query_ngram_boost(query_terms, text_content)
+            bm25_total = bm25_score + boost + ngram_boost
+            semantic_score = float((semantic_pages.get(doc_id) or {}).get("score", 0.0))
             exact_match = self._query_term_coverage(query_terms, text_content)
-            reranked.append((bm25_total, float(bm25_score), semantic_score, exact_match, doc_id, page))
+            expanded_match = self._term_coverage(expanded_terms, text_content)
+            reranked.append((bm25_total, float(bm25_score), semantic_score, exact_match, expanded_match, doc_id, page))
 
         if not reranked:
             return []
@@ -270,20 +349,28 @@ class SearchService:
         semantic_max = max(item[2] for item in reranked) or 1.0
 
         bm25_w, semantic_w, exact_w = self._dynamic_weights(query_terms)
+        expanded_w = 0.15 if expanded_terms else 0.0
 
         scored = []
-        for bm25_total, bm25_raw, semantic_score, exact_match, doc_id, page in reranked:
+        for bm25_total, bm25_raw, semantic_score, exact_match, expanded_match, doc_id, page in reranked:
             bm25_norm = bm25_total / bm25_max if bm25_max > 0 else 0.0
             semantic_norm = semantic_score / semantic_max if semantic_max > 0 else 0.0
-            final_score = (bm25_w * bm25_norm) + (semantic_w * semantic_norm) + (exact_w * exact_match)
-            scored.append((final_score, bm25_total, semantic_score, exact_match, bm25_raw, doc_id, page))
+            semantic_adjusted = semantic_norm * (0.6 + 0.4 * exact_match)
+            final_score = (
+                (bm25_w * bm25_norm)
+                + (semantic_w * semantic_adjusted)
+                + (exact_w * exact_match)
+                + (expanded_w * expanded_match)
+            )
+            scored.append((final_score, bm25_total, semantic_score, exact_match, expanded_match, bm25_raw, doc_id, page))
 
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
 
         results = []
         title_cache: dict[int, str] = {}
-        for score, _bm25_total, _semantic_score, _exact_match, _bm25_score, (book_id, page_number), page in scored:
+        for score, _bm25_total, _semantic_score, _exact_match, _expanded_match, _bm25_score, (book_id, page_number), page in scored:
             text_content = page.get("text_content", "") or page_texts.get((book_id, page_number), "") or ""
+            semantic_hint = str((semantic_pages.get((book_id, page_number)) or {}).get("chunk_text", ""))
             title = self._resolve_title(book_id=book_id, page=page, books_metadata=books_metadata, title_cache=title_cache)
             results.append(
                 {
@@ -292,7 +379,7 @@ class SearchService:
                     "page_id": page.get("page_id", f"{book_id}_{page_number}"),
                     "page_number": page_number,
                     "score": round(float(score), 6),
-                    "snippet": _snippet(text_content, query_terms),
+                    "snippet": _snippet(text_content, query_terms, semantic_hint=semantic_hint),
                 }
             )
 
