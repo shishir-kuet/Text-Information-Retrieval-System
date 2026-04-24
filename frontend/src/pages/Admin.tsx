@@ -1,29 +1,19 @@
-import { useEffect, useMemo, useState } from "react"
-import { BookOpen, Upload } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Activity, AlertTriangle, BarChart3, BookOpen, Clock3, Database, RefreshCw, Search, ShieldAlert, Users } from "lucide-react"
 import { api } from "../lib/api"
 import { useAuth } from "../lib/auth"
-import type { BooksResponse, DomainListResponse } from "../lib/types"
+import type { AdminIndexStats, BooksResponse } from "../lib/types"
 import { Button } from "../components/ui/button"
-import { Input } from "../components/ui/input"
-import { Select } from "../components/ui/select"
 
 export default function Admin() {
   const { token, user } = useAuth()
   const [books, setBooks] = useState<BooksResponse | null>(null)
-  const [domains, setDomains] = useState<DomainListResponse | null>(null)
+  const [stats, setStats] = useState<AdminIndexStats | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
-  const [processStatus, setProcessStatus] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [indexStatus, setIndexStatus] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [processing, setProcessing] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [building, setBuilding] = useState(false)
-
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadDomain, setUploadDomain] = useState("")
-  const [uploadTitle, setUploadTitle] = useState("")
-  const [uploadAuthor, setUploadAuthor] = useState("")
-  const [uploadYear, setUploadYear] = useState("")
 
   const [fullRebuild, setFullRebuild] = useState(false)
   const [booksPage, setBooksPage] = useState(1)
@@ -32,12 +22,12 @@ export default function Admin() {
   const loadAll = async () => {
     if (!token) return
     try {
-      const [bookData, domainData] = await Promise.all([
+      const [bookData, statsData] = await Promise.all([
         api.adminBooks(token),
-        api.adminDomains(token),
+        api.adminIndexStats(token),
       ])
       setBooks(bookData)
-      setDomains(domainData)
+      setStats(statsData)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -49,6 +39,7 @@ export default function Admin() {
 
   const bookItems = books?.items ?? []
   const totalBooks = books?.count ?? bookItems.length
+  const dashboardStats = stats
 
   const totalBookPages = Math.max(1, Math.ceil(bookItems.length / booksPerPage))
   const safeBooksPage = Math.min(Math.max(1, booksPage), totalBookPages)
@@ -60,15 +51,6 @@ export default function Admin() {
     }
   }, [booksPage, safeBooksPage])
 
-  const domainOptions = useMemo(() => {
-    const items = domains?.items ?? []
-    return items.map((domain) => ({ label: domain, value: domain }))
-  }, [domains])
-
-  const domainSelectOptions = useMemo(() => {
-    return [{ label: "Select domain", value: "" }, ...domainOptions]
-  }, [domainOptions])
-
   if (!token) {
     return <div className="text-white/70">Admin login required.</div>
   }
@@ -77,78 +59,29 @@ export default function Admin() {
     return <div className="text-white/70">Admin access required.</div>
   }
 
-  const handleUpload = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleSync = async () => {
     if (!token) return
-    if (!uploadFile || !uploadDomain || !uploadTitle.trim() || !uploadAuthor.trim()) {
-      setError("File, domain, title, and author are required.")
-      return
-    }
-    const formData = new FormData()
-    formData.append("file", uploadFile)
-    formData.append("domain", uploadDomain)
-    formData.append("title", uploadTitle.trim())
-    formData.append("author", uploadAuthor.trim())
-    if (uploadYear.trim()) {
-      formData.append("year", uploadYear.trim())
-    }
-    setUploadStatus("Uploading...")
+    setSyncStatus("Syncing books from library...")
     setError(null)
     try {
-      setUploading(true)
-      await api.adminUpload(token, formData)
-      setUploadStatus("Upload success")
-      await loadAll()
-      setUploadFile(null)
-      setUploadTitle("")
-      setUploadAuthor("")
-      setUploadYear("")
-    } catch (err) {
-      setError((err as Error).message)
-      setUploadStatus(null)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleProcess = async () => {
-    if (!token) return
-    setProcessStatus("Processing...")
-    setError(null)
-    try {
-      setProcessing(true)
-      const response = await api.adminProcessUploaded(token)
-      const payload = response as {
-        processed_count?: number
-        total_uploaded?: number
-        errors?: Array<{ book_id: number; error: string }>
-        message?: string
-        job_id?: string
-      }
-      if (payload.errors && payload.errors.length > 0) {
-        const failedIds = payload.errors.map((item) => item.book_id).join(", ")
-        setError(`Some books failed to process: ${failedIds}`)
-      }
-      if (payload.message) {
-        setProcessStatus(payload.message)
-      } else if (typeof payload.processed_count === "number" && typeof payload.total_uploaded === "number") {
-        setProcessStatus(`Process completed (${payload.processed_count}/${payload.total_uploaded})`)
-      } else {
-        setProcessStatus("Process completed")
-      }
+      setSyncing(true)
+      const response = await api.adminSyncBooks(token)
+      const payload = response as { total_books?: number; new_books?: number; updated_books?: number }
+      setSyncStatus(
+        `Sync completed (${payload.new_books ?? 0} new, ${payload.updated_books ?? 0} updated, ${payload.total_books ?? 0} total)`,
+      )
       await loadAll()
     } catch (err) {
       setError((err as Error).message)
-      setProcessStatus(null)
+      setSyncStatus(null)
     } finally {
-      setProcessing(false)
+      setSyncing(false)
     }
   }
 
   const handleBuild = async () => {
     if (!token) return
     setIndexStatus("Building index...")
-    setProcessStatus(null)
     setError(null)
     try {
       setBuilding(true)
@@ -181,70 +114,21 @@ export default function Admin() {
     <div className="space-y-8">
       <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/80 p-6">
         <div className="flex items-center gap-3">
-          <Upload className="h-5 w-5" />
+          <RefreshCw className="h-5 w-5" />
           <h1 className="text-2xl font-semibold">Admin Console</h1>
         </div>
-        <p className="mt-2 text-sm text-white/60">Upload books, process pages, and rebuild search indexes.</p>
+        <p className="mt-2 text-sm text-white/60">Sync library content, rebuild the local index, and review search activity.</p>
       </div>
 
       {error && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
-          <form onSubmit={handleUpload} className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
-            <h2 className="text-lg font-semibold">Upload a book</h2>
-            <div className="mt-4 space-y-3">
-              <Input
-                type="file"
-                name="file"
-                accept="application/pdf"
-                required
-                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-              />
-              <Select
-                value={uploadDomain}
-                onChange={setUploadDomain}
-                options={domainSelectOptions}
-                className="h-12"
-              />
-              {domainOptions.length === 0 && (
-                <div className="text-xs text-white/60">No domains found in the books folder yet.</div>
-              )}
-              <Input
-                type="text"
-                name="title"
-                placeholder="Title"
-                value={uploadTitle}
-                onChange={(event) => setUploadTitle(event.target.value)}
-                required
-              />
-              <Input
-                type="text"
-                name="author"
-                placeholder="Author"
-                value={uploadAuthor}
-                onChange={(event) => setUploadAuthor(event.target.value)}
-                required
-              />
-              <Input
-                type="number"
-                name="year"
-                placeholder="Year (optional)"
-                value={uploadYear}
-                onChange={(event) => setUploadYear(event.target.value)}
-              />
-              <Button type="submit" disabled={uploading}>
-                {uploading ? "Uploading..." : "Upload"}
-              </Button>
-              {uploadStatus && <div className="text-xs text-white/70">{uploadStatus}</div>}
-            </div>
-          </form>
-
           <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
-            <h2 className="text-lg font-semibold">Process & Index</h2>
+            <h2 className="text-lg font-semibold">Sync & Index</h2>
             <div className="mt-4 space-y-3">
               <div className="text-sm text-white/70">
-                Process all uploaded books in realtime, then build the index from processed books.
+                Pull the latest book metadata from the library system, then build or update the local search index.
               </div>
               <div className="flex flex-wrap gap-3 text-xs text-white/60">
                 <label className="flex items-center gap-2">
@@ -253,16 +137,36 @@ export default function Admin() {
                 </label>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button type="button" variant="outline" onClick={handleProcess} disabled={processing}>
-                  {processing ? "Processing..." : "Process Book"}
+                <Button type="button" variant="outline" onClick={handleSync} disabled={syncing}>
+                  {syncing ? "Syncing..." : "Sync Books"}
                 </Button>
                 <Button type="button" onClick={handleBuild} disabled={building}>
                   {building ? "Building..." : "Build Index"}
                 </Button>
               </div>
-              {processStatus && <div className="text-xs text-white/70">{processStatus}</div>}
+              {syncStatus && <div className="text-xs text-white/70">{syncStatus}</div>}
               {indexStatus && <div className="text-xs text-white/70">{indexStatus}</div>}
             </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {[
+              { label: "Total searches", value: dashboardStats?.total_search_logs ?? 0, icon: Search },
+              { label: "Avg latency (ms)", value: dashboardStats?.average_latency_ms ?? 0, icon: Clock3 },
+              { label: "Zero-result searches", value: dashboardStats?.zero_result_searches ?? 0, icon: ShieldAlert },
+              { label: "Success rate", value: `${dashboardStats?.success_rate ?? 0}%`, icon: Activity },
+              { label: "Zero-result rate", value: `${dashboardStats?.zero_result_rate ?? 0}%`, icon: AlertTriangle },
+              { label: "Unique queries", value: dashboardStats?.unique_queries ?? 0, icon: Database },
+              { label: "Total users", value: dashboardStats?.total_users ?? 0, icon: Users },
+            ].map((metric) => (
+              <div key={metric.label} className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-5">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50">
+                  <metric.icon className="h-4 w-4" />
+                  {metric.label}
+                </div>
+                <div className="mt-3 text-2xl font-semibold text-white">{metric.value}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -270,14 +174,14 @@ export default function Admin() {
           <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
             <div className="flex items-center gap-2 text-lg font-semibold">
               <BookOpen className="h-4 w-4" />
-              Books
+              Synced Books
             </div>
             <div className="mt-1 text-xs text-white/60">Total books: {totalBooks}</div>
             <div className="mt-4 space-y-3 text-sm text-white/70">
               {pagedBooks.map((book) => (
                 <div key={book.book_id} className="card-hover rounded-xl border border-white/10 bg-black/20 p-3">
                   <div className="font-semibold text-white">{book.title}</div>
-                  <div className="text-xs text-white/60">{book.domain} · {book.status}</div>
+                  <div className="text-xs text-white/60">{book.domain ?? "Library"} · {book.status}</div>
                 </div>
               ))}
             </div>
@@ -302,6 +206,74 @@ export default function Admin() {
               >
                 Next
               </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <BarChart3 className="h-4 w-4" />
+            Search Volume
+          </div>
+          <div className="mt-4 space-y-4">
+            {(dashboardStats?.recent_search_activity ?? []).map((item) => {
+              const maxSearches = Math.max(1, ...(dashboardStats?.recent_search_activity ?? []).map((entry) => entry.searches))
+              const width = `${Math.max(6, Math.round((item.searches / maxSearches) * 100))}%`
+              return (
+                <div key={item.date} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-white/60">
+                    <span>{item.date}</span>
+                    <span>{item.searches} searches</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-white/10">
+                    <div className="h-3 rounded-full bg-[var(--color-accent)] transition-all duration-300" style={{ width }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-7">
+          <h2 className="text-lg font-semibold">Search Quality Overview</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Index status</div>
+              <div className="mt-2 text-base text-white/80">
+                {dashboardStats?.index_available ? "Local search index is available" : "Local search index is missing"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Semantic index</div>
+              <div className="mt-2 text-base text-white/80">
+                {dashboardStats?.semantic_index_available ? "Semantic index is available" : "Semantic index is missing"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Synced books</div>
+              <div className="mt-2 text-base text-white/80">{dashboardStats?.synced_books ?? 0} synced books</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Last build</div>
+              <div className="mt-2 text-base text-white/80">{dashboardStats?.build_date ?? "Not built yet"}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4 sm:col-span-2">
+              <div className="text-xs uppercase tracking-wide text-white/50">Sync health</div>
+              <div className="mt-3 grid gap-3 grid-cols-2">
+                {[
+                  { label: "Processed", value: dashboardStats?.synced_books_by_status?.processed ?? 0 },
+                  { label: "Uploaded", value: dashboardStats?.synced_books_by_status?.uploaded ?? 0 },
+                  { label: "Indexed", value: dashboardStats?.synced_books_by_status?.indexed ?? 0 },
+                  { label: "Other", value: dashboardStats?.synced_books_by_status?.other ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-white/45">{item.label}</div>
+                    <div className="mt-1 text-xl font-semibold text-white">{item.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

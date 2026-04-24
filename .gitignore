@@ -21,9 +21,17 @@ dist/
 .env
 .env.*
 !.env.example
-
+data/training_dataset_*.json
+data/exports/training_data_*.csv
+data/*.json
+data/*.csv
+data/*.pkl
+data/*.index
+data/*.faiss
+data/exports/
 # Backend runtime artifacts
 backend/books/
+backend-library/books
 backend/data/search_index.pkl
 backend/data/exports/
 backend/data/*.pkl
@@ -39,6 +47,15 @@ frontend/dist/
 frontend/.vite/
 frontend/coverage/
 frontend/.eslintcache
+frontend-library/node_modules/
+frontend-library/dist/
+frontend-library/.vite/
+frontend-library/coverage/
+frontend-library/.eslintcache
+
+# Library backend runtime artifacts
+backend-library/books/
+backend-library/data/
 
 # IDE / OS
 .vscode/

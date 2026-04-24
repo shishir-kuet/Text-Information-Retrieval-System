@@ -3,20 +3,15 @@ import os
 import pickle
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from backend.app.config.database import get_database
-from backend.app.config.paths import SEMANTIC_INDEX_FILE, SEMANTIC_META_FILE, SEMANTIC_PAGE_MAP_FILE
+from backend.app.config.paths import SEARCH_INDEX_FILE, SEMANTIC_INDEX_FILE, SEMANTIC_META_FILE, SEMANTIC_PAGE_MAP_FILE
 from backend.app.config.settings import settings
-from backend.app.models import (
-    BOOK_STATUS_INDEXED,
-    BOOK_STATUS_PROCESSED,
-    ensure_page_document,
-    ensure_schema_indexes,
-)
+from backend.app.models import ensure_schema_indexes
 
 
 def _now_str() -> str:
@@ -72,21 +67,27 @@ class SemanticIndexService:
         self.index_file = SEMANTIC_INDEX_FILE
         self.meta_file = SEMANTIC_META_FILE
         self.page_map_file = SEMANTIC_PAGE_MAP_FILE
-        self.index = None
-        self.meta = None
-        self.page_map = None
-        self.index_mtime = None
-        self.model = None
+        self.index: faiss.Index | None = None
+        self.meta: dict[int, dict] | None = None
+        self.page_map: dict[tuple[int, int], list[int]] | None = None
+        self.index_mtime: float | None = None
+        self.model: SentenceTransformer | None = None
 
     def _load_model(self) -> SentenceTransformer:
         if self.model is None:
-            self.model = SentenceTransformer(settings.semantic_model_name)
+            # Force CPU + disable low_cpu_mem_usage to avoid occasional
+            # meta-tensor loading failures on some torch/transformers combos.
+            self.model = SentenceTransformer(
+                settings.semantic_model_name,
+                device="cpu",
+                model_kwargs={"low_cpu_mem_usage": False},
+            )
         return self.model
 
     def index_available(self) -> bool:
         return self.index_file.exists() and self.meta_file.exists() and self.page_map_file.exists()
 
-    def load_index(self, force_reload: bool = False):
+    def load_index(self, force_reload: bool = False) -> tuple[faiss.Index, dict[int, dict], dict[tuple[int, int], list[int]]]:
         if not self.index_available():
             raise FileNotFoundError("Semantic index files not found")
 
@@ -96,7 +97,7 @@ class SemanticIndexService:
             self.page_map_file.stat().st_mtime,
         )
         if self.index is not None and not force_reload and self.index_mtime == mtime:
-            return self.index, self.meta, self.page_map
+            return self.index, self.meta or {}, self.page_map or {}
 
         self.index = faiss.read_index(str(self.index_file))
         with open(self.meta_file, "rb") as f:
@@ -104,7 +105,12 @@ class SemanticIndexService:
         with open(self.page_map_file, "rb") as f:
             self.page_map = pickle.load(f)
         self.index_mtime = mtime
-        return self.index, self.meta, self.page_map
+        index = self.index
+        meta = self.meta
+        page_map = self.page_map
+        if index is None or meta is None or page_map is None:
+            raise RuntimeError("Failed to load semantic index artifacts")
+        return index, meta, page_map
 
     def embed_texts(self, texts: list[str]) -> np.ndarray:
         model = self._load_model()
@@ -123,13 +129,50 @@ class SemanticIndexService:
     def semantic_top_chunks(self, query_embedding: np.ndarray, top_k: int) -> list[tuple[int, float]]:
         index, _, _ = self.load_index()
         query = np.asarray([query_embedding], dtype="float32")
-        scores, ids = index.search(query, top_k)
+        scores, ids = cast(Any, index).search(query, top_k)
         results: list[tuple[int, float]] = []
         for chunk_id, score in zip(ids[0], scores[0]):
             if chunk_id == -1:
                 continue
             results.append((int(chunk_id), float(score)))
         return results
+
+    def semantic_top_pages(self, query: str, top_k: int, *, chunk_top_k: int | None = None) -> dict[tuple[int, int], dict[str, Any]]:
+        query = (query or "").strip()
+        if not query:
+            return {}
+
+        index, meta, _ = self.load_index()
+        if index.ntotal == 0:
+            return {}
+
+        query_embedding = self.embed_query(query)
+        page_limit = max(int(top_k), 1)
+        chunk_limit = max(int(chunk_top_k or page_limit * 20), page_limit)
+        top_hits = self.semantic_top_chunks(query_embedding, top_k=chunk_limit)
+
+        page_scores: dict[tuple[int, int], dict[str, Any]] = {}
+        for chunk_id, score in top_hits:
+            chunk_meta = meta.get(chunk_id) or {}
+            book_id = chunk_meta.get("book_id")
+            page_number = chunk_meta.get("page_number")
+            if book_id is None or page_number is None:
+                continue
+
+            page_id = (int(book_id), int(page_number))
+            current = float((page_scores.get(page_id) or {}).get("score", 0.0))
+            if score > current:
+                page_scores[page_id] = {
+                    "score": float(score),
+                    "chunk_id": int(chunk_id),
+                    "chunk_text": str(chunk_meta.get("chunk_text") or ""),
+                }
+
+        if len(page_scores) <= page_limit:
+            return page_scores
+
+        ranked_pages = sorted(page_scores.items(), key=lambda item: float((item[1] or {}).get("score", 0.0)), reverse=True)
+        return dict(ranked_pages[:page_limit])
 
     def semantic_scores_for_pages(self, query: str, page_ids: list[tuple[int, int]], top_k: int) -> dict[tuple[int, int], float]:
         query = (query or "").strip()
@@ -160,32 +203,6 @@ class SemanticIndexService:
         return scores
 
 
-def _iter_pages(book_ids: list[int]):
-    db = get_database()
-    pages = db["pages"]
-    cursor = pages.find(
-        {"book_id": {"$in": list(book_ids)}},
-        {"book_id": 1, "page_number": 1, "text_content": 1},
-    )
-    for raw_page in cursor:
-        yield ensure_page_document(raw_page)
-
-
-def _load_books_metadata(book_ids: list[int]) -> dict[int, dict]:
-    db = get_database()
-    books = db["books"]
-    lookup = {}
-    cursor = books.find({"book_id": {"$in": list(book_ids)}}, {"book_id": 1, "title": 1})
-    for raw_book in cursor:
-        book_id = raw_book.get("book_id")
-        if book_id is None:
-            continue
-        lookup[int(book_id)] = {
-            "book_name": raw_book.get("title") or "Unknown",
-        }
-    return lookup
-
-
 def _create_faiss_index(dim: int, total_vectors: int):
     if total_vectors <= 0:
         base = faiss.IndexFlatIP(dim)
@@ -210,20 +227,9 @@ def _train_index(index, training_vectors: np.ndarray):
 
 
 def build_semantic_index(*, full_rebuild: bool = False):
-    """Build the FAISS semantic index and chunk metadata."""
+    """Build the FAISS semantic index and chunk metadata from the local search index."""
     ensure_schema_indexes()
-    db = get_database()
-    books = db["books"]
-    page_chunks = db["page_chunks"]
-
-    statuses = [BOOK_STATUS_PROCESSED] if not full_rebuild else [BOOK_STATUS_PROCESSED, BOOK_STATUS_INDEXED]
-    eligible_ids = [
-        int(b.get("book_id"))
-        for b in books.find({"status": {"$in": statuses}}, {"book_id": 1})
-        if b.get("book_id") is not None
-    ]
-
-    if not eligible_ids:
+    if not SEARCH_INDEX_FILE.exists():
         return {
             "mode": "full" if full_rebuild else "incremental",
             "indexed_books": 0,
@@ -232,45 +238,51 @@ def build_semantic_index(*, full_rebuild: bool = False):
             "total_chunks": 0,
             "build_date": _now_str(),
             "skipped": True,
-            "message": "No eligible books to index",
+            "message": "Search index not found",
         }
 
     service = SemanticIndexService()
 
-    if full_rebuild or not service.index_available():
-        index = None
-        meta: dict[int, dict] = {}
-        page_map: dict[tuple[int, int], list[int]] = {}
-        next_chunk_id = 1
-    else:
-        index, meta, page_map = service.load_index()
-        next_chunk_id = max(meta.keys(), default=0) + 1
+    index = None
+    meta: dict[int, dict] = {}
+    page_map: dict[tuple[int, int], list[int]] = {}
+    next_chunk_id = 1
 
     model = service._load_model()
-    dim = int(model.get_sentence_embedding_dimension())
+    dim_raw = model.get_sentence_embedding_dimension()
+    if dim_raw is None:
+        raise ValueError("Sentence transformer returned no embedding dimension")
+    dim = int(dim_raw)
+
+    with open(SEARCH_INDEX_FILE, "rb") as f:
+        search_index = pickle.load(f)
+
+    page_texts = search_index.get("page_texts", {}) or {}
+    books_metadata = search_index.get("books_metadata", {}) or {}
+
+    if not page_texts:
+        return {
+            "mode": "full" if full_rebuild else "incremental",
+            "indexed_books": 0,
+            "indexed_chunks": 0,
+            "empty_pages": 0,
+            "total_chunks": 0,
+            "build_date": _now_str(),
+            "skipped": True,
+            "message": "No page text available in search index",
+        }
 
     if index is None:
         index = _create_faiss_index(dim, 0)
 
-    if not full_rebuild and service.index_available():
-        to_remove = [cid for cid, info in meta.items() if info.get("book_id") in eligible_ids]
-        if to_remove:
-            selector = faiss.IDSelectorArray(np.array(to_remove, dtype="int64"))
-            index.remove_ids(selector)
-            for cid in to_remove:
-                meta.pop(cid, None)
-        page_map = {k: v for k, v in page_map.items() if k[0] not in set(eligible_ids)}
-
-    page_chunks.delete_many({"book_id": {"$in": list(eligible_ids)}})
-
-    book_lookup = _load_books_metadata(eligible_ids)
+    unique_books = sorted({int(book_id) for book_id, _page_number in page_texts.keys()})
 
     training_texts: list[str] = []
     total_chunks = 0
     empty_pages = 0
 
-    for page in _iter_pages(eligible_ids):
-        text = clean_text(page.get("text_content", ""))
+    for (book_id, page_number), raw_text in page_texts.items():
+        text = clean_text(raw_text)
         if not text:
             empty_pages += 1
             continue
@@ -288,7 +300,7 @@ def build_semantic_index(*, full_rebuild: bool = False):
     if total_chunks == 0:
         return {
             "mode": "full" if full_rebuild else "incremental",
-            "indexed_books": len(eligible_ids),
+            "indexed_books": len(unique_books),
             "indexed_chunks": 0,
             "empty_pages": empty_pages,
             "total_chunks": 0,
@@ -309,7 +321,6 @@ def build_semantic_index(*, full_rebuild: bool = False):
         _train_index(index, np.asarray(train_vectors, dtype="float32"))
 
     indexed_chunks = 0
-    chunk_batch: list[dict] = []
     embed_texts: list[str] = []
     embed_ids: list[int] = []
 
@@ -325,25 +336,17 @@ def build_semantic_index(*, full_rebuild: bool = False):
         )
         vectors = np.asarray(vectors, dtype="float32")
         ids = np.asarray(embed_ids, dtype="int64")
-        index.add_with_ids(vectors, ids)
+        cast(Any, index).add_with_ids(vectors, ids)
         indexed_chunks += len(embed_ids)
         embed_texts.clear()
         embed_ids.clear()
 
-    def flush_chunks():
-        if not chunk_batch:
-            return
-        page_chunks.insert_many(list(chunk_batch))
-        chunk_batch.clear()
-
-    for page in _iter_pages(eligible_ids):
-        text = clean_text(page.get("text_content", ""))
+    for (book_id, page_number), raw_text in page_texts.items():
+        text = clean_text(raw_text)
         if not text:
             continue
 
-        book_id = int(page.get("book_id"))
-        page_number = int(page.get("page_number"))
-        book_name = (book_lookup.get(book_id) or {}).get("book_name") or "Unknown"
+        book_name = (books_metadata.get(book_id) or {}).get("title") or (books_metadata.get(str(book_id)) or {}).get("title") or "Unknown"
         chunks = split_into_chunks(
             text,
             min_words=settings.chunk_min_words,
@@ -354,18 +357,6 @@ def build_semantic_index(*, full_rebuild: bool = False):
         for chunk_index, chunk_text in enumerate(chunks, start=1):
             chunk_id = next_chunk_id
             next_chunk_id += 1
-
-            chunk_doc = {
-                "chunk_id": chunk_id,
-                "book_id": book_id,
-                "book_name": book_name,
-                "page_number": page_number,
-                "chunk_index": chunk_index,
-                "chunk_text": chunk_text,
-                "word_count": len(chunk_text.split()),
-                "char_count": len(chunk_text),
-            }
-            chunk_batch.append(chunk_doc)
 
             meta[chunk_id] = {
                 "chunk_id": chunk_id,
@@ -380,12 +371,9 @@ def build_semantic_index(*, full_rebuild: bool = False):
             embed_texts.append(chunk_text)
             embed_ids.append(chunk_id)
 
-            if len(chunk_batch) >= 200:
-                flush_chunks()
             if len(embed_texts) >= 128:
                 flush_embeddings()
 
-    flush_chunks()
     flush_embeddings()
 
     os.makedirs(SEMANTIC_INDEX_FILE.parent, exist_ok=True)
@@ -395,7 +383,7 @@ def build_semantic_index(*, full_rebuild: bool = False):
 
     return {
         "mode": "full" if full_rebuild else "incremental",
-        "indexed_books": len(eligible_ids),
+        "indexed_books": len(unique_books),
         "indexed_chunks": indexed_chunks,
         "empty_pages": empty_pages,
         "total_chunks": len(meta),

@@ -1,0 +1,278 @@
+You are working on an existing academic full-stack project called “Text Information Retrieval System (TIRS)”.
+
+Important: You must modify the existing project carefully. Do not break the current working search system unless a change is necessary for the new architecture. Preserve the existing coding style as much as possible.
+
+========================
+PROJECT CONTEXT
+========================
+Current project has:
+- backend/         -> main TIRS backend
+- frontend/        -> main TIRS frontend
+- docs/            -> project documentation
+- existing search/indexing logic
+- existing admin panel
+- existing auth/history features
+
+Current architecture stores:
+- books collection
+- pages collection
+-page_chunks collection
+inside the main TIRS system database.
+
+We now want to refactor the architecture into TWO SUBSYSTEMS inside the SAME ROOT PROJECT:
+
+1. Library System
+   - Responsible for:
+     - book upload
+     - PDF storage
+     - text extraction
+     - books/pages data storage
+     - exposing API for book/page text
+   - New folders:
+     - backend-library/
+     - frontend-library/
+
+2. TIRS System
+   - Responsible for:
+     - user auth
+     - user history/search logs
+     - syncing with library API
+     - building/updating local search indexes
+     - running search from local index
+   - Existing folders remain:
+     - backend/
+     - frontend/
+
+Important architectural rule:
+- Main TIRS database must NOT store books or pages collections anymore.only user related information should exist.
+- books/pages must belong to the Library system only.
+- TIRS should keep only:
+  - users
+  - search_logs
+  - optional sync/index job tracking
+  - local index artifacts/files
+- Search must remain fast by using LOCAL PREBUILT INDEXES in TIRS.
+- TIRS must NOT depend on live library API calls during every search query.
+- Library API should be used during sync/indexing and optionally page-detail/preview fetching.
+
+========================
+GOAL
+========================
+Refactor the project into this new architecture with minimal breakage.
+
+I want you to implement the following:
+
+========================
+PART 1: CREATE LIBRARY SUBSYSTEM
+========================
+Create a new folder structure:
+- backend-library/
+- frontend-library/
+
+The Library subsystem should have the following responsibilities:
+
+A. frontend-library
+Create a simple admin UI for:
+- Upload Book form
+  -same as in the TIRS system
+- View uploaded books list
+- Trigger/process text extraction for uploaded books
+- Show processing status
+
+This UI can be simple and functional. Do not over-design.
+
+B. backend-library
+Create a backend service (prefer same language/framework style as practical for the current project context; if easiest, use Flask to stay consistent with the current backend) that supports:
+
+1. Book upload API
+2. Book processing/text extraction API
+3. Books listing API
+4. Pages/text retrieval API
+
+Suggested responsibilities:
+- Save uploaded PDF files under a library-side storage folder
+- Store book metadata
+- Extract page text from PDF
+- Use OCR fallback if needed, if feasible from current codebase
+- Store books/pages in the LIBRARY database only
+
+Create separate library-side collections/tables conceptually for:
+- books
+- pages
+
+Fields should be similar to current project where useful:
+books:
+--existing field
+
+pages:
+--existing field
+
+page_chunks:
+existing field
+
+Implement APIs like:
+- POST /api/library/books/upload
+- POST /api/library/books/<book_id>/process
+- GET /api/library/books
+- GET /api/library/books/<book_id>
+- GET /api/library/books/<book_id>/pages
+- GET /api/library/pages/<page_id>
+- GET /api/library/pages/<page_id>/text
+
+You may adjust endpoint naming if needed, but keep them clean and REST-like.
+
+========================
+PART 2: REFACTOR MAIN TIRS SYSTEM
+========================
+Modify the existing main TIRS system so that:
+
+1. Remove dependency on local books/pages collections in the TIRS database.
+   - Do not delete code blindly.
+   - Refactor safely.
+   - Keep only TIRS-relevant database entities such as:
+     - users
+     - search_logs
+
+2. Add a Library API client/service inside the main TIRS backend.
+   Create a clean service module, e.g.:
+   - backend/app/services/library_client.py
+
+This service should support:
+- fetch all books from library
+- fetch one book
+- fetch pages of a book
+- fetch one page text
+
+3. Update the admin functionality of the main TIRS system.
+   The old admin panel previously handled:
+   - upload
+   - process
+   - index build
+
+Now change the TIRS admin panel so it becomes a retrieval-side admin panel only.
+
+It should contain:
+- Sync Books from Library
+- Build / Update Search Index
+- Search Logs
+
+Remove or hide old local upload/process features from the TIRS admin panel.
+
+4. Implement Sync behavior in TIRS.
+   “Sync Books from Library” should:
+   - call library API
+   - fetch latest available books
+   - detect new or updated books
+   - prepare those books for indexing
+
+5. Implement Build/Update Index behavior in TIRS.
+   On clicking Build/Update Index:
+   - fetch required page text from Library API
+   - preprocess text
+   - build/update BM25 positional index
+   - build/update semantic index if current system supports it
+   - save local index files only in TIRS side
+   - do NOT store full page texts in TIRS database
+
+6. Keep search runtime local and fast.
+   Search endpoint in TIRS must:
+   - use local prebuilt indexes
+   - not call Library API for every query
+   - continue to return ranked book/page results
+
+7. Page/result detail behavior:
+   If needed, when user opens a result page, TIRS may call Library API for page text/details/preview metadata. That is acceptable.
+
+========================
+PART 3: KEEP EXISTING SEARCH QUALITY
+========================
+Preserve as much as possible from the current search pipeline:
+- BM25 search
+- phrase/proximity-aware reranking
+- semantic reranking with MiniLM + FAISS if already present
+- page-level ranking
+- local index files
+
+Important:
+- Search logic should still work over local indexes.
+- Only the SOURCE of raw book/page data changes: now it comes from Library API during sync/indexing.
+
+========================
+PART 4: DATABASE / STORAGE SPLIT
+========================
+After refactor, final logical split should be:
+
+Library DB/storage:
+- books
+- pages
+-page_chunks
+- uploaded PDFs
+- extraction/processing related data
+
+TIRS DB/storage:
+- users
+- search_logs
+- local search index files:
+  - search_index.pkl
+  - semantic.index
+  - semantic_meta.pkl
+  - semantic_page_map.pkl
+
+Do NOT keep books/pages collections in TIRS database anymore.
+
+========================
+PART 5: DOCUMENTATION UPDATE
+========================
+Update documentation files accordingly:
+- README.md
+- docs/database-schema.md
+- docs/system-architecture.md
+
+Update them to describe the new two-subsystem architecture:
+1. Library subsystem
+2. TIRS subsystem
+
+The docs must clearly explain:
+- responsibilities of each subsystem
+- data flow
+- admin flow
+- sync and indexing workflow
+- which database stores what
+- why search remains fast
+- why this architecture is better for large-scale libraries
+
+========================
+PART 6: IMPLEMENTATION STYLE
+========================
+Important rules:
+- Make changes carefully and incrementally.
+- Reuse existing code for PDF extraction and indexing where possible.
+- Do not rewrite everything from scratch unless necessary.
+- Preserve existing auth/history behavior in TIRS.
+- Keep naming clean and readable.
+- Keep folder structure organized.
+- Prefer minimal but working UI for library frontend/admin.
+- Prefer maintainable code over hacks.
+
+========================
+PART 7: EXPECTED OUTPUT
+========================
+I want you to do ALL of the following:
+
+1. Analyze the current codebase first.
+2. Identify which current modules belong to:
+   - Library subsystem
+   - TIRS subsystem
+3. Refactor code accordingly.
+4. Create the new folders and files.
+5. Update routes, services, config, and docs.
+6. Make the project runnable in this new architecture.
+7. If docker/docker-compose needs updating, update it too.
+8. Add clear comments only where needed.
+9. At the end, provide a concise summary of:
+   - what was changed
+   - new workflow
+   - how to run both subsystems
+
+
+Then start implementing.

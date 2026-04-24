@@ -2,8 +2,6 @@ from backend.app.services.admin_service import (
     build_index_and_update,
     index_stats,
     list_books,
-    process_book,
-    upload_book,
 )
 from backend.app.services.auth_service import login_user, me_user, register_user
 from backend.app.services.search_log_service import (
@@ -27,7 +25,5 @@ __all__ = [
     "list_books",
     "login_user",
     "me_user",
-    "process_book",
     "register_user",
-    "upload_book",
 ]
