@@ -137,6 +137,43 @@ class SemanticIndexService:
             results.append((int(chunk_id), float(score)))
         return results
 
+    def semantic_top_pages(self, query: str, top_k: int, *, chunk_top_k: int | None = None) -> dict[tuple[int, int], dict[str, Any]]:
+        query = (query or "").strip()
+        if not query:
+            return {}
+
+        index, meta, _ = self.load_index()
+        if index.ntotal == 0:
+            return {}
+
+        query_embedding = self.embed_query(query)
+        page_limit = max(int(top_k), 1)
+        chunk_limit = max(int(chunk_top_k or page_limit * 20), page_limit)
+        top_hits = self.semantic_top_chunks(query_embedding, top_k=chunk_limit)
+
+        page_scores: dict[tuple[int, int], dict[str, Any]] = {}
+        for chunk_id, score in top_hits:
+            chunk_meta = meta.get(chunk_id) or {}
+            book_id = chunk_meta.get("book_id")
+            page_number = chunk_meta.get("page_number")
+            if book_id is None or page_number is None:
+                continue
+
+            page_id = (int(book_id), int(page_number))
+            current = float((page_scores.get(page_id) or {}).get("score", 0.0))
+            if score > current:
+                page_scores[page_id] = {
+                    "score": float(score),
+                    "chunk_id": int(chunk_id),
+                    "chunk_text": str(chunk_meta.get("chunk_text") or ""),
+                }
+
+        if len(page_scores) <= page_limit:
+            return page_scores
+
+        ranked_pages = sorted(page_scores.items(), key=lambda item: float((item[1] or {}).get("score", 0.0)), reverse=True)
+        return dict(ranked_pages[:page_limit])
+
     def semantic_scores_for_pages(self, query: str, page_ids: list[tuple[int, int]], top_k: int) -> dict[tuple[int, int], float]:
         query = (query or "").strip()
         if not query:
