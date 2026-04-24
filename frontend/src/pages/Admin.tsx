@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react"
-import { BookOpen, RefreshCw } from "lucide-react"
+import { Activity, AlertTriangle, BarChart3, BookOpen, Clock3, Database, RefreshCw, Search, ShieldAlert, Users } from "lucide-react"
 import { api } from "../lib/api"
 import { useAuth } from "../lib/auth"
-import type { BooksResponse, SearchLogsResponse } from "../lib/types"
+import type { AdminIndexStats, BooksResponse } from "../lib/types"
 import { Button } from "../components/ui/button"
 
 export default function Admin() {
   const { token, user } = useAuth()
   const [books, setBooks] = useState<BooksResponse | null>(null)
-  const [logs, setLogs] = useState<SearchLogsResponse | null>(null)
+  const [stats, setStats] = useState<AdminIndexStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [indexStatus, setIndexStatus] = useState<string | null>(null)
@@ -22,12 +22,12 @@ export default function Admin() {
   const loadAll = async () => {
     if (!token) return
     try {
-      const [bookData, logData] = await Promise.all([
+      const [bookData, statsData] = await Promise.all([
         api.adminBooks(token),
-        api.adminSearchLogs(token, 8, 0),
+        api.adminIndexStats(token),
       ])
       setBooks(bookData)
-      setLogs(logData)
+      setStats(statsData)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -39,6 +39,7 @@ export default function Admin() {
 
   const bookItems = books?.items ?? []
   const totalBooks = books?.count ?? bookItems.length
+  const dashboardStats = stats
 
   const totalBookPages = Math.max(1, Math.ceil(bookItems.length / booksPerPage))
   const safeBooksPage = Math.min(Math.max(1, booksPage), totalBookPages)
@@ -148,19 +149,24 @@ export default function Admin() {
             </div>
           </div>
 
-          <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
-            <h2 className="text-lg font-semibold">Search Logs</h2>
-            <div className="mt-4 space-y-3 text-sm text-white/70">
-              {(logs?.items ?? []).map((log) => (
-                <div key={log.log_id} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="font-semibold text-white">{log.query_text}</div>
-                  <div className="text-xs text-white/60">
-                    {log.total_results} results · {log.latency_ms} ms · {log.created_at}
-                  </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {[
+              { label: "Total searches", value: dashboardStats?.total_search_logs ?? 0, icon: Search },
+              { label: "Avg latency (ms)", value: dashboardStats?.average_latency_ms ?? 0, icon: Clock3 },
+              { label: "Zero-result searches", value: dashboardStats?.zero_result_searches ?? 0, icon: ShieldAlert },
+              { label: "Success rate", value: `${dashboardStats?.success_rate ?? 0}%`, icon: Activity },
+              { label: "Zero-result rate", value: `${dashboardStats?.zero_result_rate ?? 0}%`, icon: AlertTriangle },
+              { label: "Unique queries", value: dashboardStats?.unique_queries ?? 0, icon: Database },
+              { label: "Total users", value: dashboardStats?.total_users ?? 0, icon: Users },
+            ].map((metric) => (
+              <div key={metric.label} className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-5">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50">
+                  <metric.icon className="h-4 w-4" />
+                  {metric.label}
                 </div>
-              ))}
-              {(logs?.items ?? []).length === 0 && <div className="text-xs text-white/60">No recent search logs.</div>}
-            </div>
+                <div className="mt-3 text-2xl font-semibold text-white">{metric.value}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -200,6 +206,74 @@ export default function Admin() {
               >
                 Next
               </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-6">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <BarChart3 className="h-4 w-4" />
+            Search Volume
+          </div>
+          <div className="mt-4 space-y-4">
+            {(dashboardStats?.recent_search_activity ?? []).map((item) => {
+              const maxSearches = Math.max(1, ...(dashboardStats?.recent_search_activity ?? []).map((entry) => entry.searches))
+              const width = `${Math.max(6, Math.round((item.searches / maxSearches) * 100))}%`
+              return (
+                <div key={item.date} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-white/60">
+                    <span>{item.date}</span>
+                    <span>{item.searches} searches</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-white/10">
+                    <div className="h-3 rounded-full bg-[var(--color-accent)] transition-all duration-300" style={{ width }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="card-hover rounded-3xl border border-white/10 bg-[var(--color-surface)]/70 p-7">
+          <h2 className="text-lg font-semibold">Search Quality Overview</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Index status</div>
+              <div className="mt-2 text-base text-white/80">
+                {dashboardStats?.index_available ? "Local search index is available" : "Local search index is missing"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Semantic index</div>
+              <div className="mt-2 text-base text-white/80">
+                {dashboardStats?.semantic_index_available ? "Semantic index is available" : "Semantic index is missing"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Synced books</div>
+              <div className="mt-2 text-base text-white/80">{dashboardStats?.synced_books ?? 0} synced books</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wide text-white/50">Last build</div>
+              <div className="mt-2 text-base text-white/80">{dashboardStats?.build_date ?? "Not built yet"}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4 sm:col-span-2">
+              <div className="text-xs uppercase tracking-wide text-white/50">Sync health</div>
+              <div className="mt-3 grid gap-3 grid-cols-2">
+                {[
+                  { label: "Processed", value: dashboardStats?.synced_books_by_status?.processed ?? 0 },
+                  { label: "Uploaded", value: dashboardStats?.synced_books_by_status?.uploaded ?? 0 },
+                  { label: "Indexed", value: dashboardStats?.synced_books_by_status?.indexed ?? 0 },
+                  { label: "Other", value: dashboardStats?.synced_books_by_status?.other ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-white/45">{item.label}</div>
+                    <div className="mt-1 text-xl font-semibold text-white">{item.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
