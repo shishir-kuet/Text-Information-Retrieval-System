@@ -107,6 +107,23 @@ export type AdminIndexStats = {
   semantic_index_size_bytes: number
   total_users: number
   total_search_logs: number
+  average_latency_ms: number
+  zero_result_searches: number
+  zero_result_rate: number
+  success_rate: number
+  unique_queries: number
+  synced_books: number
+  synced_books_by_status: {
+    processed: number
+    uploaded: number
+    indexed: number
+    other: number
+  }
+  recent_search_activity: Array<{
+    date: string
+    searches: number
+    average_latency_ms: number
+  }>
 }
 
 export type SearchLogsResponse = {
