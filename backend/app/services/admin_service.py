@@ -2,7 +2,13 @@
 from pathlib import Path
 
 from backend.app.config.database import get_database
-from backend.app.config.paths import SEARCH_INDEX_FILE, SEMANTIC_INDEX_FILE, SEMANTIC_META_FILE, SEMANTIC_PAGE_MAP_FILE
+from backend.app.config.paths import (
+    LIBRARY_BOOK_MANIFEST_FILE,
+    SEARCH_INDEX_FILE,
+    SEMANTIC_INDEX_FILE,
+    SEMANTIC_META_FILE,
+    SEMANTIC_PAGE_MAP_FILE,
+)
 from backend.app.models import ensure_schema_indexes
 from backend.app.services.library_index_service import build_index
 from backend.app.services.library_sync_service import LibrarySyncService
@@ -30,7 +36,25 @@ def build_index_and_update(full_rebuild: bool = False):
 
 
 def list_books(limit: int = 100):
-    return LibrarySyncService().client.list_books(limit=limit).get("items", [])
+    if not LIBRARY_BOOK_MANIFEST_FILE.exists():
+        return []
+
+    try:
+        with open(LIBRARY_BOOK_MANIFEST_FILE, "rb") as handle:
+            manifest = pickle.load(handle) or {}
+    except Exception:
+        return []
+
+    if isinstance(manifest, dict):
+        items = list(manifest.values())
+    elif isinstance(manifest, list):
+        items = list(manifest)
+    else:
+        items = []
+
+    items = [item for item in items if isinstance(item, dict)]
+    items.sort(key=lambda item: int(item.get("book_id", 0) or 0), reverse=True)
+    return items[:limit]
 
 
 def index_stats():

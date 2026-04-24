@@ -83,7 +83,7 @@ export const api = {
     requestJson<Record<string, unknown>>("/api/admin/sync/books", { method: "POST" }, token),
   adminIndexStats: (token: string) => requestJson<AdminIndexStats>("/api/admin/index/stats", {}, token),
   adminBooks: (token: string, limit = 200) =>
-    requestJson<LibraryBooksResponse>(`/api/library/books?limit=${limit}`, {}, token),
+    requestJson<LibraryBooksResponse>(`/api/admin/books?limit=${limit}`, {}, token),
   adminSearchLogs: (token: string, limit = 100, skip = 0) =>
     requestJson<SearchLogsResponse>(`/api/admin/logs/search?limit=${limit}&skip=${skip}`, {}, token),
 }
