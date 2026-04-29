@@ -28,7 +28,7 @@ export function AppShell() {
               <BookOpen className="h-6 w-6" />
             </div>
             <div>
-              <div className="text-lg font-bold">TIRS</div>
+              <div className="text-lg font-bold">DualSeek</div>
               <div className="text-xs text-white/70">Information Retrieval System</div>
             </div>
           </Link>
@@ -83,7 +83,7 @@ export function AppShell() {
 
       <footer className="relative z-10 border-t border-white/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 text-xs text-white/60">
-          <div>© 2026 Text Information Retrieval System</div>
+          <div>© 2026 DualSeek</div>
         </div>
       </footer>
     </div>
