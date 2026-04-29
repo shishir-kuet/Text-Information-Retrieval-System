@@ -31,8 +31,7 @@ export default function Home() {
       >
         <div className="space-y-6">
           <h1 className="text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
-            Text Information<br />
-            <span className="text-[var(--color-accent)]">Retrieval System</span>
+            <span className="text-[var(--color-accent)]">DualSeek</span>
           </h1>
           <p className="max-w-xl text-base text-white/70 sm:text-lg">
             Find the right page in seconds. Search by a line or paragraph, open the original PDF for accuracy, and
@@ -90,7 +89,7 @@ export default function Home() {
         transition={{ duration: 0.8, delay: 0.2 }}
       >
         <h2 className="text-3xl font-semibold">
-          Why Choose <span className="text-[var(--color-accent)]">TIRS</span>?
+          Why Choose <span className="text-[var(--color-accent)]">DualSeek</span>?
         </h2>
         <div className="mt-8 grid gap-6 md:grid-cols-3">
           {[
