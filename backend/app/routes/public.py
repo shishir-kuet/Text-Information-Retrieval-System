@@ -4,6 +4,7 @@ import time
 
 from flask import Blueprint, request, send_file
 
+from backend.app.config.database import get_database
 from backend.app.services.search_log_service import create_search_log
 from backend.app.services.library_client import LibraryClient
 from backend.app.services.search_service import SearchService

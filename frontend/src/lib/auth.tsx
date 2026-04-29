@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api } from "./api"
 import type { AuthUser } from "./types"
 
-const TOKEN_KEY = "tirs_token"
+const TOKEN_KEY = "dualseek_token"
 
 type AuthContextValue = {
   token: string | null
