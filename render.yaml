@@ -1,0 +1,30 @@
+# Render configuration for deploying backend (Python web service) and frontend (static site)
+
+services:
+  - type: web
+    name: backend
+    env: python
+    repo: REPO_URL_PLACEHOLDER
+    branch: main
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT backend.run:app"
+    envVars:
+      - key: MONGO_URI
+        value: ""
+      - key: DB_NAME
+        value: "book_search_system"
+      - key: JWT_SECRET
+        value: "change-me"
+
+  - type: static
+    name: frontend
+    env: node
+    repo: REPO_URL_PLACEHOLDER
+    branch: main
+    buildCommand: "cd frontend && npm install && npm run build"
+    publishCommand: "cd frontend && npm run build"
+    staticPublishPath: frontend/dist
+
+# Notes:
+# 1. Replace REPO_URL_PLACEHOLDER with your GitHub/GitLab repo URL when creating the Render service.
+# 2. Configure sensitive env vars (MONGO_URI, JWT_SECRET) in the Render dashboard or using Render secrets.
