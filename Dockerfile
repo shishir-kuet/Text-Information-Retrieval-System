@@ -16,4 +16,5 @@ COPY backend /app/backend
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "gunicorn -w 4 -b 0.0.0.0:${PORT:-5000} backend.run:app"]
+ENTRYPOINT ["sh", "-c"]
+CMD ["gunicorn -w 4 -b 0.0.0.0:${PORT:-5000} backend.run:app"]
