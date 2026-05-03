@@ -7,3 +7,5 @@ PyJWT
 sentence-transformers
 faiss-cpu
 numpy
+gunicorn
+requests
